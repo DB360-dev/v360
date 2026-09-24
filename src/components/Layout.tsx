@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Boxes, ChevronsUpDown, Home, LogOut, Menu, Monitor, Moon, PackageCheck, Settings, Sun, Truck, WifiOff, X } from "lucide-react";
+import { Activity, Archive, Boxes, ChevronsUpDown, Home, LogOut, Menu, Monitor, Moon, PackageCheck, Settings, Sun, Truck, WifiOff, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useActiveBrand } from "@/context/BrandContext";
 import { useTheme, type ThemeChoice } from "@/context/ThemeContext";
@@ -17,6 +17,8 @@ const NAV = [
   { to: "/orders", label: "Orders", icon: Boxes },
   { to: "/dispatch", label: "Ready to send", icon: PackageCheck, badge: "ready" as const },
   { to: "/dispatches", label: "Dispatches", icon: Truck },
+  { to: "/stock", label: "Local stock", icon: Archive },
+  { to: "/activity", label: "Latest updates", icon: Activity },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -113,53 +115,54 @@ export function Layout() {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[236px_1fr] print:block">
-      <aside className="sticky top-0 hidden h-screen print:!hidden border-r border-line bg-surface lg:block"><Sidebar /></aside>
+      {/* Sidebar Column 1 */}
+      <aside className="sticky top-0 hidden h-screen print:!hidden border-r border-line bg-surface lg:block">
+        <Sidebar />
+      </aside>
 
-      {/* Desktop Top Header */}
-      <header className="sticky top-0 z-20 hidden items-center justify-between border-b border-line bg-surface/90 px-6 py-3 backdrop-blur-md lg:flex print:!hidden">
-        <div className="flex items-center gap-3">
-          <h2 className="text-[15px] font-semibold text-ink">{brand.name}</h2>
-          <span className="rounded bg-sunken px-2 py-0.5 text-[11.5px] font-medium text-muted">Brand Portal</span>
-        </div>
-        <div className="relative flex items-center gap-3">
-          <NotificationToggle />
-          <NotificationPanel />
-        </div>
-      </header>
-
-      {/* Mobile Top Header */}
-      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-surface px-4 py-2.5 lg:hidden print:hidden">
-        <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => setOpen(true)} className="rounded p-1.5 hover:bg-sunken" aria-label="Open menu"><Menu className="h-5 w-5" /></button>
-          <span className="truncate font-semibold">{brand.name}</span>
-        </div>
-        <div className="relative flex items-center gap-2">
-          <NotificationToggle />
-          <NotificationPanel />
-        </div>
-      </div>
-
+      {/* Mobile Drawer */}
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-[rgb(var(--shadow)/0.45)]" onClick={() => setOpen(false)} />
           <div className="absolute inset-y-0 left-0 w-72 border-r border-line bg-surface shadow-pop">
-            <button onClick={() => setOpen(false)} className="absolute right-2 top-3 rounded p-1.5 hover:bg-sunken" aria-label="Close menu"><X className="h-4 w-4" /></button>
+            <button onClick={() => setOpen(false)} className="absolute right-2 top-3 rounded p-1.5 hover:bg-sunken" aria-label="Close menu">
+              <X className="h-4 w-4" />
+            </button>
             <Sidebar onNavigate={() => setOpen(false)} />
           </div>
         </div>
       )}
 
-      <main className="min-w-0">
-        {!online && (
-          <div role="status" className="flex items-center gap-2 bg-g-problem-bg px-6 py-2 text-[13.5px] text-g-problem">
-            <WifiOff className="h-4 w-4" aria-hidden /> You're offline. Changes won't save until your connection is back.
+      {/* Content Column 2 */}
+      <div className="flex min-w-0 flex-col min-h-screen">
+        {/* Top Header */}
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-surface/90 px-4 py-2.5 sm:px-6 sm:py-3 backdrop-blur-md print:!hidden">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => setOpen(true)} className="rounded p-1.5 hover:bg-sunken lg:hidden" aria-label="Open menu">
+              <Menu className="h-5 w-5" />
+            </button>
+            <h2 className="truncate text-[15px] font-semibold text-ink">{brand.name}</h2>
+            <span className="hidden rounded bg-sunken px-2 py-0.5 text-[11.5px] font-medium text-muted sm:inline-block">Brand Portal</span>
           </div>
-        )}
-        <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-          <NotificationBanner />
-          <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
-        </div>
-      </main>
+          <div className="relative flex items-center gap-3">
+            <NotificationToggle />
+            <NotificationPanel />
+          </div>
+        </header>
+
+        {/* Main Section */}
+        <main className="flex-1 min-w-0">
+          {!online && (
+            <div role="status" className="flex items-center gap-2 bg-g-problem-bg px-6 py-2 text-[13.5px] text-g-problem">
+              <WifiOff className="h-4 w-4" aria-hidden /> You're offline. Changes won't save until your connection is back.
+            </div>
+          )}
+          <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+            <NotificationBanner />
+            <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

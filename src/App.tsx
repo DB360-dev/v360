@@ -14,7 +14,9 @@ import { Orders } from "@/pages/Orders";
 import { OrderDetail } from "@/pages/OrderDetail";
 import { Dispatch } from "@/pages/Dispatch";
 import { Dispatches } from "@/pages/Dispatches";
+import { Inventory } from "@/pages/Inventory";
 import { Settings } from "@/pages/Settings";
+import { Activity } from "@/pages/Activity";
 import { NotFound } from "@/pages/NotFound";
 
 /** Signed in? Otherwise to /login (remembering where they were going). */
@@ -53,6 +55,8 @@ export const router = createBrowserRouter([
           { path: "orders/:id", element: <OrderDetail /> },
           { path: "dispatch", element: <Dispatch /> },
           { path: "dispatches", element: <Dispatches /> },
+          { path: "stock", element: <Inventory /> },
+          { path: "activity", element: <Activity /> },
           { path: "settings", element: <Settings /> },
           { path: "*", element: <NotFound /> },
         ],

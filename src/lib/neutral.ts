@@ -9,7 +9,13 @@ export function neutralize(text: string | null | undefined): string {
   if (!text) return "";
   const out = text
     .replace(/\bV360 hub\b/gi, "hub")
+    .replace(/\bKBB Fulfilment\b/gi, "delivery partner")
+    .replace(/\bKBB fulfillment\b/gi, "delivery partner")
+    .replace(/\bKBB partner\b/gi, "delivery partner")
     .replace(/\bthe fulfilment partner\b/gi, "the delivery partner")
+    .replace(/\bthe fulfillment partner\b/gi, "the delivery partner")
+    .replace(/\bfulfilment partner\b/gi, "delivery partner")
+    .replace(/\bfulfillment partner\b/gi, "delivery partner")
     .replace(INTERNAL_NAMES, "our team")
     .replace(/\bour team or our team\b/gi, "our team");
   // Capitalise if a replacement landed at the start of a sentence.

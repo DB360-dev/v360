@@ -33,9 +33,17 @@ export interface Order {
   brand_confirmed_at: string | null; brand_confirmed_by: string | null;
 }
 
+export type FulfillmentSource = "pakistan" | "bangladesh";
+
 export interface OrderItem {
   id: string; order_id: string; product_name: string; sku: string | null; variant: string | null;
   quantity: number; unit_price: number; discount: number; received_quantity: number;
+  fulfillment_source: FulfillmentSource;
+}
+
+/** A brand's stock already in the customer's country (local inventory). */
+export interface InventoryItem {
+  id: string; brand_id: string; sku: string; quantity_available: number; updated_at: string;
 }
 
 export interface InboundBatch {

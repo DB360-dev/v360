@@ -213,14 +213,24 @@ export function OrderDetail() {
           <Section title="Items">
             <div className="-m-4 overflow-x-auto">
               <table className="w-full min-w-[520px] text-[13.5px]">
-                <thead className="table-head"><tr><th>Product</th><th>SKU</th><th className="text-right">Qty</th><th className="text-right">Price</th>{atOrAfterHub && <th className="text-right">At hub</th>}</tr></thead>
+                <thead className="table-head"><tr><th>Product</th><th>SKU</th>{o.inbound_batch_id && <th>Fulfilled by</th>}<th className="text-right">Qty</th><th className="text-right">Price</th>{atOrAfterHub && <th className="text-right">At hub</th>}</tr></thead>
                 <tbody className="table-body">
                   {o.order_items.map((i) => {
                     const short = atOrAfterHub && i.received_quantity < i.quantity;
+                    const local = i.fulfillment_source === "bangladesh";
                     return (
                       <tr key={i.id}>
                         <td><div className="font-medium">{i.product_name}</div>{i.variant && <div className="text-[12.5px] text-muted">{i.variant}</div>}</td>
                         <td className="text-muted">{i.sku ?? "—"}</td>
+                        {o.inbound_batch_id && (
+                          <td className="whitespace-nowrap text-muted">
+                            {local ? (
+                              <span className="inline-flex items-center gap-1.5" title="Fulfilled from local inventory">
+                                <span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden /> Inventory
+                              </span>
+                            ) : "Pakistan"}
+                          </td>
+                        )}
                         <td className="text-right">{i.quantity}</td>
                         <td className="whitespace-nowrap text-right">{fmtMoney(i.unit_price, o.currency)}</td>
                         {atOrAfterHub && (

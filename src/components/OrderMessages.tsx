@@ -3,6 +3,7 @@ import { Send } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
 import { useMarkMessagesRead, useOrderMessages, useSendMessage } from "@/hooks/useData";
 import { fmtDateTime } from "@/lib/format";
+import { displayActor, neutralize } from "@/lib/neutral";
 import { Spinner, ErrorState } from "@/components/ui/States";
 import type { OrderMessage } from "@/lib/types";
 
@@ -19,10 +20,10 @@ function Bubble({ msg, brandName }: { msg: OrderMessage; brandName: string }) {
             : "rounded-bl-sm bg-sunken text-ink border border-line"
         }`}
       >
-        {msg.body}
+        {neutralize(msg.body)}
       </div>
       <div className="px-1 text-[11.5px] text-faint">
-        {isOwn ? brandName : msg.sender_label} · {fmtDateTime(msg.created_at)}
+        {isOwn ? brandName : displayActor(msg.sender_label, brandName)} · {fmtDateTime(msg.created_at)}
       </div>
     </div>
   );
@@ -73,7 +74,7 @@ export function OrderMessages({ orderId }: Props) {
       <div className="flex max-h-[420px] min-h-[200px] flex-col gap-3 overflow-y-auto rounded-lg border border-line bg-surface p-4">
         {messages.length === 0 ? (
           <p className="m-auto text-[13.5px] text-muted">
-            No messages yet. Send a message to the V360 team about this order.
+            No messages yet. Send a message to our team about this order.
           </p>
         ) : (
           messages.map((msg) => (
@@ -104,7 +105,7 @@ export function OrderMessages({ orderId }: Props) {
         </button>
       </div>
       <p className="text-[12px] text-faint">
-        Messages are visible to the V360 operations team only.
+        Messages are visible to our operations team only.
       </p>
     </div>
   );

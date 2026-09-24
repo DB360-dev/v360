@@ -3,7 +3,8 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { describeError, describeFunctionError } from "@/lib/errors";
 import type {
-  FxRate, InboundBatchOverview, Order, OrderDetail, OrderEvent, OrderItem, OrderMessage, OrderOverview, OrderStatus, ShopifyConnection,
+  FulfillmentSource, FxRate, InboundBatchOverview, InventoryItem, Order, OrderDetail, OrderEvent, OrderItem,
+  OrderMessage, OrderOverview, OrderStatus, ShopifyConnection,
 } from "@/lib/types";
 import { plural } from "@/lib/format";
 
@@ -21,6 +22,9 @@ export const keys = {
   batchOrders: (brandId: string, id: string) => ["brand", brandId, "batch", id] as const,
   activity: (brandId: string) => ["brand", brandId, "activity"] as const,
   attention: (brandId: string) => ["brand", brandId, "attention"] as const,
+  inventory: (brandId: string) => ["brand", brandId, "inventory"] as const,
+  localOrders: (brandId: string) => ["brand", brandId, "localOrders"] as const,
+  dispatchItems: (brandId: string, ids: string) => ["brand", brandId, "dispatchItems", ids] as const,
   shopify: (brandId: string) => ["brand", brandId, "shopify"] as const,
   messages: (brandId: string, orderId: string) => ["brand", brandId, "messages", orderId] as const,
 };
@@ -109,6 +113,84 @@ export function useReadyToSend(brandId: string) {
   });
 }
 
+/** The brand's local (already in country) inventory, read for the dispatch dialog and the Local stock page. */
+export function useInventory(brandId: string) {
+  return useQuery({
+    queryKey: keys.inventory(brandId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brand_inventory")
+        .select("*")
+        .eq("brand_id", brandId)
+        .order("sku");
+      if (error) throw error;
+      return (data ?? []) as InventoryItem[];
+    },
+  });
+}
+
+/** Order items for the orders being dispatched (so the dialog can list every line). */
+export function useDispatchItems(brandId: string, orderIds: string[]) {
+  const ids = orderIds.slice().sort().join(",");
+  return useQuery({
+    queryKey: keys.dispatchItems(brandId, ids),
+    enabled: ids.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_number, order_items(*)")
+        .in("id", orderIds)
+        .order("order_number");
+      if (error) throw error;
+      return (data ?? []) as { id: string; order_number: string; order_items: OrderItem[] }[];
+    },
+  });
+}
+
+export function useUpsertInventory(brandId: string, opts?: ActionOptions) {
+  return useBrandAction(
+    brandId,
+    (v: { sku: string; quantity: number }) =>
+      rpc<null>("upsert_inventory", { p_brand_id: brandId, p_sku: v.sku, p_quantity: v.quantity }),
+    () => "Local stock saved",
+    opts,
+  );
+}
+
+export function useRemoveInventory(brandId: string, opts?: ActionOptions) {
+  return useBrandAction(
+    brandId,
+    (sku: string) => rpc<null>("delete_inventory", { p_brand_id: brandId, p_sku: sku }),
+    (sku) => `Removed ${sku}`,
+    opts,
+  );
+}
+
+export interface InventoryOrder {
+  id: string; order_number: string; order_date: string; status: OrderStatus; status_changed_at: string;
+  customer_name: string | null; city: string | null; order_total: number; currency: string;
+  /** Only the lines fulfilled from local inventory. */
+  order_items: OrderItem[];
+}
+
+/** The brand's own orders that are fulfilled from local inventory (one or more lines marked "bangladesh"). */
+export function useInventoryOrders(brandId: string) {
+  return useQuery({
+    queryKey: keys.localOrders(brandId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, order_number, order_date, status, status_changed_at, customer_name, city, order_total, currency, order_items!inner(*)")
+        .eq("brand_id", brandId)
+        .eq("order_items.fulfillment_source", "bangladesh")
+        .order("order_date", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data ?? []) as InventoryOrder[];
+    },
+  });
+}
+
 export function useNeedsAttention(brandId: string) {
   return useQuery({
     queryKey: keys.attention(brandId),
@@ -131,7 +213,7 @@ export function useRecentActivity(brandId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("order_events").select("*, order:orders!inner(order_number, brand_id)")
-        .eq("order.brand_id", brandId).order("id", { ascending: false }).limit(12);
+        .eq("order.brand_id", brandId).order("id", { ascending: false }).limit(50);
       if (error) throw error;
       return (data ?? []) as ActivityEvent[];
     },
@@ -227,7 +309,11 @@ export function useBrandConfirmOrder(brandId: string, orderId: string, opts?: Ac
   );
 }
 
-export interface DispatchInput { orderIds: string[]; courier: string; tracking: string; date: string; notes: string }
+export interface DispatchInput {
+  orderIds: string[]; courier: string; tracking: string; date: string; notes: string;
+  /** Per order_item id → where it's fulfilled from. Omitted items default to "pakistan". */
+  itemSources?: Record<string, FulfillmentSource>;
+}
 
 export function useDispatch(brandId: string, opts?: ActionOptions) {
   return useBrandAction(
@@ -235,6 +321,7 @@ export function useDispatch(brandId: string, opts?: ActionOptions) {
     (v: DispatchInput) => rpc<string>("create_inbound_batch", {
       p_order_ids: v.orderIds, p_courier: v.courier.trim(), p_tracking_number: v.tracking.trim() || null,
       p_dispatch_date: v.date, p_notes: v.notes.trim() || null,
+      p_item_sources: v.itemSources && Object.keys(v.itemSources).length ? v.itemSources : null,
     }),
     (_r, v) => `${plural(v.orderIds.length, "order")} dispatched to the hub`,
     opts,

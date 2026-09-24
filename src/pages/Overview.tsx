@@ -1,10 +1,9 @@
 import { Link } from "react-router-dom";
-import { PlugZap, CheckCircle2 } from "lucide-react";
+import { PlugZap, CheckCircle2, ArrowRight } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
-import { useNeedsAttention, useRecentActivity, useShopifyConnection, useStatusCounts } from "@/hooks/useData";
+import { useNeedsAttention, useShopifyConnection, useStatusCounts } from "@/hooks/useData";
 import { JOURNEY, STATUS } from "@/lib/status";
-import { fmtDateTime, since, daysSince } from "@/lib/format";
-import { displayActor, neutralize } from "@/lib/neutral";
+import { since, daysSince } from "@/lib/format";
 import type { OrderStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -116,33 +115,6 @@ function NeedsAction() {
   );
 }
 
-function Activity() {
-  const { brand } = useActiveBrand();
-  const q = useRecentActivity(brand.id);
-  return (
-    <section className="panel">
-      <div className="border-b border-line px-4 py-3"><h2>Latest updates</h2></div>
-      {q.isLoading ? <Spinner /> : q.isError ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : q.data!.length === 0 ? (
-        <EmptyState title="No activity yet">Updates on your orders will appear here as they happen.</EmptyState>
-      ) : (
-        <ul className="divide-y divide-line">
-          {q.data!.map((e) => (
-            <li key={e.id}>
-              <Link to={`/orders/${e.order_id}`} className="block px-4 py-2.5 hover:bg-sunken/60">
-                <div className="text-[13.5px]">
-                  <span className="font-medium">{e.order.order_number}</span>{" "}
-                  <span className="text-muted">{e.to_status ? (STATUS[e.to_status]?.label ?? neutralize(e.action)) : neutralize(e.action)}</span>
-                </div>
-                <div className="text-[12.5px] text-faint">{displayActor(e.actor_label, brand.name)}, {fmtDateTime(e.created_at)}</div>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
 export function Overview() {
   const { brand } = useActiveBrand();
   return (
@@ -150,9 +122,14 @@ export function Overview() {
       <PageHeader title="Overview" description={`Orders for ${brand.name}, updated live.`} />
       <ShopifyBanner />
       <Pipeline />
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="mt-6 flex flex-col gap-6">
         <NeedsAction />
-        <Activity />
+        <div className="flex justify-end">
+          <Link to="/activity" className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5 text-[13.5px] font-medium text-ink shadow-sm hover:bg-sunken">
+            View full activity & latest updates
+            <ArrowRight className="h-4 w-4 text-primary" />
+          </Link>
+        </div>
       </div>
     </>
   );
