@@ -30,7 +30,7 @@ export function Dispatch() {
     <>
       <PageHeader
         title="Ready to send"
-        description="Customer-confirmed orders. Pack every item, then dispatch them to the hub."
+        description="Orders the delivery partner has confirmed with the customer. Pack every item, then dispatch them to the hub."
         actions={orders.length > 0 && <Button onClick={() => window.print()} className="print:hidden"><Printer className="h-4 w-4" /> Print packing list</Button>}
       />
 

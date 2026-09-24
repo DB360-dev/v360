@@ -2,17 +2,18 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CheckCircle2, ShoppingBag } from "lucide-react";
+import { CheckCircle2, RefreshCw, ShoppingBag } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { describeError } from "@/lib/errors";
 import { fmtDateTime } from "@/lib/format";
 import { useAuth } from "@/context/AuthContext";
 import { useActiveBrand } from "@/context/BrandContext";
 import { useTheme, type ThemeChoice } from "@/context/ThemeContext";
-import { useConnectShopify, useShopifyConnection } from "@/hooks/useData";
+import { useConnectShopify, useDisconnectShopify, useShopifyConnection, useSyncShopify } from "@/hooks/useData";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { TextField } from "@/components/ui/Field";
 import { ErrorState, Spinner } from "@/components/ui/States";
 import type { StatusGroup } from "@/lib/status";
@@ -37,12 +38,15 @@ function ShopifyCard() {
   const { brand, isOwner } = useActiveBrand();
   const q = useShopifyConnection(brand.id);
   const connect = useConnectShopify(brand.id);
+  const disconnect = useDisconnectShopify(brand.id);
+  const sync = useSyncShopify(brand.id);
   const [shop, setShop] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const s = shop.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+    const s = shop.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "") || q.data?.shop_domain || "";
     if (!s) { setErr("Enter your store address"); return; }
     if (!/^[a-z0-9][a-z0-9-]*(\.myshopify\.com)?$/.test(s)) { setErr("Use your myshopify address, e.g. yourbrand.myshopify.com. Not your custom domain."); return; }
     setErr(null);
@@ -53,7 +57,7 @@ function ShopifyCard() {
   const active = c?.status === "active";
 
   return (
-    <Card title="Shopify store" description="Orders from this store come into the portal automatically.">
+    <Card title="Shopify store" description="Connect the store, disconnect it, or sync the latest order updates.">
       {q.isLoading ? <Spinner /> : q.isError ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : (
         <div className="space-y-4">
           {c && (
@@ -70,23 +74,68 @@ function ShopifyCard() {
             </dl>
           )}
           {!isOwner ? (
-            !active && <p className="text-[13.5px] text-muted">Only the brand owner can connect the Shopify store.</p>
+            <p className="text-[13.5px] text-muted">Only the brand owner can connect, disconnect, or sync the Shopify store.</p>
           ) : (
-            <form onSubmit={submit} noValidate className="flex flex-wrap items-start gap-2">
-              <div className="min-w-[240px] flex-1">
-                <TextField
-                  label={active ? "Reconnect or switch store" : "Store address"}
-                  placeholder="yourbrand.myshopify.com" value={shop} onChange={(e) => setShop(e.target.value)} error={err}
-                  hint="Find it in Shopify admin under Settings, then Domains."
-                />
+            <form onSubmit={submit} noValidate className="space-y-3">
+              <TextField
+                label="Store address"
+                placeholder="yourbrand.myshopify.com"
+                value={shop}
+                onChange={(e) => setShop(e.target.value)}
+                error={err}
+                hint={active ? "Leave blank to reconnect this store, or enter another myshopify address to switch." : "Find it in Shopify admin under Settings, then Domains."}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" variant={active ? "secondary" : "primary"} loading={connect.isPending}>
+                  Connect
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={!active || disconnect.isPending}
+                  onClick={() => setConfirmDisconnect(true)}
+                >
+                  Disconnect
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  disabled={!active}
+                  loading={sync.isPending}
+                  onClick={() => sync.mutate()}
+                >
+                  <RefreshCw className="h-4 w-4" /> Sync
+                </Button>
               </div>
-              <Button type="submit" variant={active ? "secondary" : "primary"} loading={connect.isPending} className="mt-[26px]">
-                {active ? "Reconnect" : "Connect Shopify"}
-              </Button>
             </form>
           )}
         </div>
       )}
+      <Dialog
+        open={confirmDisconnect}
+        onClose={() => setConfirmDisconnect(false)}
+        title="Disconnect Shopify?"
+        description="New orders will stop coming in until you connect the store again. Existing orders in the portal are kept."
+        busy={disconnect.isPending}
+        footer={
+          <>
+            <Button onClick={() => setConfirmDisconnect(false)} disabled={disconnect.isPending}>Cancel</Button>
+            <Button
+              variant="danger"
+              loading={disconnect.isPending}
+              onClick={() => {
+                disconnect.mutate(undefined, {
+                  onSuccess: () => setConfirmDisconnect(false),
+                });
+              }}
+            >
+              Disconnect store
+            </Button>
+          </>
+        }
+      >
+        <p className="text-[13.5px] text-muted">You can connect the same store later with the Connect button.</p>
+      </Dialog>
     </Card>
   );
 }

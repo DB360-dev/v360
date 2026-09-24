@@ -20,12 +20,12 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
   const dispatch = useDispatch(brandId, { inlineErrors: true });
   const [courier, setCourier] = useState("TCS");
   const [tracking, setTracking] = useState("");
-  const [date, setDate] = useState(todayISO());
+  const date = todayISO();
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (open) { dispatch.reset(); setCourier("TCS"); setTracking(""); setDate(todayISO()); setNotes(""); setErrors({}); }
+    if (open) { dispatch.reset(); setCourier("TCS"); setTracking(""); setNotes(""); setErrors({}); }
   }, [open]);
 
   const submit = () => {
@@ -33,7 +33,6 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
     if (!courier.trim()) e.courier = "Enter the courier you used";
     if (courier.trim() !== "Hand delivery" && !tracking.trim()) e.tracking = "Enter the consignment number so the parcel can be tracked";
     if (!date) e.date = "Enter the dispatch date";
-    else if (date > todayISO()) e.date = "Dispatch date can't be in the future";
     setErrors(e);
     if (Object.keys(e).length) return;
     dispatch.mutate(
@@ -64,7 +63,7 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
           error={errors.tracking} placeholder="e.g. 779912345678" optional={courier.trim() === "Hand delivery"}
           hint="If these orders are in one parcel, use the same number for all of them."
         />
-        <TextField label="Dispatch date" type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} error={errors.date} />
+        <TextField label="Dispatch date" value={date} readOnly />
         <TextArea label="Notes for the hub" optional value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="e.g. 2 bags, fragile items in the blue bag" />
         <p className="rounded bg-sunken px-3 py-2 text-[13px] text-muted">
           Every item in these orders must be in the parcel. Each order is checked at the hub on arrival, and it only ships onward once all its items are received.

@@ -18,14 +18,24 @@ function Pipeline() {
   if (q.isError) return <div className="panel"><ErrorState error={q.error} onRetry={() => q.refetch()} /></div>;
   const c = q.data ?? {};
   const sum = (ss: OrderStatus[]) => ss.reduce((n, s) => n + (c[s] ?? 0), 0);
+  const total = Object.values(c).reduce((n, v) => n + (v ?? 0), 0);
   const attention = sum(["delivery_failed", "returned", "hold", "hub_issue", "needs_amendment"]);
 
   return (
     <section aria-label="Orders by stage" className="panel overflow-x-auto">
+      <div className="flex items-baseline justify-between gap-4 border-b border-line px-4 py-3">
+        <div>
+          <div className="text-[12.5px] text-muted">Total orders</div>
+          <div className={`text-[28px] font-semibold leading-none tracking-tight ${q.isLoading ? "text-faint" : ""}`}>
+            {q.isLoading ? "–" : total}
+          </div>
+        </div>
+        <Link to="/orders?tab=all" className="link text-[13px]">View all</Link>
+      </div>
       <ol className="flex min-w-[640px]">
         {JOURNEY.map((leg, i) => {
           const n = sum(leg.statuses.filter((s) => s !== "returned" && s !== "delivery_failed"));
-          const isYou = leg.key === "prepare";
+          const isYou = leg.key === "prepare" || (leg.key === "confirm" && sum(["new", "needs_amendment"]) > 0);
           return (
             <li key={leg.key} className={`relative flex-1 ${i > 0 ? "border-l border-line" : ""}`}>
               <Link to={`/orders?tab=${LEG_TAB[leg.key]}`} className="block px-4 py-4 hover:bg-sunken/60 focus-visible:bg-sunken/60">
@@ -92,7 +102,7 @@ function NeedsAction() {
                     <span className="font-semibold">{o.order_number}</span>
                     <StatusBadge status={o.status} />
                   </div>
-                  <p className="mt-1 text-[13px] text-muted">{STATUS[o.status].hint}</p>
+                  <p className="mt-1 text-[13px] text-muted">{STATUS[o.status]?.hint}</p>
                 </div>
                 <span className={`shrink-0 text-[12.5px] ${daysSince(o.status_changed_at) > 2 ? "font-semibold text-g-problem" : "text-faint"}`} title="Time waiting">
                   {since(o.status_changed_at)}
@@ -121,7 +131,7 @@ function Activity() {
               <Link to={`/orders/${e.order_id}`} className="block px-4 py-2.5 hover:bg-sunken/60">
                 <div className="text-[13.5px]">
                   <span className="font-medium">{e.order.order_number}</span>{" "}
-                  <span className="text-muted">{e.to_status ? STATUS[e.to_status].label : neutralize(e.action)}</span>
+                  <span className="text-muted">{e.to_status ? (STATUS[e.to_status]?.label ?? neutralize(e.action)) : neutralize(e.action)}</span>
                 </div>
                 <div className="text-[12.5px] text-faint">{displayActor(e.actor_label, brand.name)}, {fmtDateTime(e.created_at)}</div>
               </Link>

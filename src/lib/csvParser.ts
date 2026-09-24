@@ -264,7 +264,7 @@ export function parseOrdersFromCSV(rows: Record<string, string>[]): ParsedCsvOrd
       // ── Status ──────────────────────────────────────────────────────
       const rawStatus = pick(row, "status", "financial_status").toLowerCase();
       const validStatuses: OrderStatus[] = [
-        "new", "confirmation_pending", "customer_unreachable", "needs_amendment",
+        "new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment",
         "confirmed", "brand_preparing",
       ];
       const status: OrderStatus = validStatuses.includes(rawStatus as OrderStatus)

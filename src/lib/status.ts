@@ -4,11 +4,12 @@ import type { InboundStatus, OrderStatus, ShipmentStatus } from "./types";
 export type StatusGroup = "brand" | "confirming" | "hub" | "transit" | "done" | "problem" | "closed";
 
 export const STATUS: Record<OrderStatus, { label: string; group: StatusGroup; hint: string }> = {
-  new:                    { label: "New", group: "confirming", hint: "Our team will call the customer to confirm this order." },
+  new:                    { label: "New", group: "brand", hint: "Confirm this order is correct so our team can call the customer." },
+  brand_confirmed:        { label: "Brand confirmed", group: "confirming", hint: "You've confirmed this order. Our team will call the customer next." },
   confirmation_pending:   { label: "Confirmation pending", group: "confirming", hint: "Our team is confirming this order with the customer." },
   customer_unreachable:   { label: "Customer unreachable", group: "confirming", hint: "We couldn't reach the customer yet and will try again." },
   needs_amendment:        { label: "Needs amendment", group: "brand", hint: "The customer asked for a change. Update the order details so we can reconfirm." },
-  confirmed:              { label: "Confirmed", group: "brand", hint: "The customer confirmed. Prepare the items and dispatch them to the hub." },
+  confirmed:              { label: "Fulfilment confirmed", group: "brand", hint: "The customer confirmed with the delivery partner. Prepare the items and dispatch them to the hub." },
   cancelled:              { label: "Cancelled", group: "closed", hint: "This order was cancelled." },
   brand_preparing:        { label: "Preparing", group: "brand", hint: "You're preparing this order. Dispatch it to the hub when it's packed." },
   dispatched_to_hub:      { label: "Dispatched to hub", group: "hub", hint: "On its way to the hub. Every item is checked on arrival." },
@@ -46,8 +47,8 @@ export const GROUP_CLASSES: Record<StatusGroup, { text: string; bg: string; dot:
 
 /** Tabs on the Orders page, in order. "Needs your action" comes first. */
 export const ORDER_TABS: { key: string; label: string; statuses: OrderStatus[] | null }[] = [
-  { key: "action", label: "Needs your action", statuses: ["needs_amendment", "confirmed", "brand_preparing", "hub_issue"] },
-  { key: "confirming", label: "Confirming", statuses: ["new", "confirmation_pending", "customer_unreachable"] },
+  { key: "action", label: "Needs your action", statuses: ["new", "needs_amendment", "confirmed", "brand_preparing", "hub_issue"] },
+  { key: "confirming", label: "Confirming", statuses: ["brand_confirmed", "confirmation_pending", "customer_unreachable"] },
   { key: "hub", label: "At hub", statuses: ["dispatched_to_hub", "received_at_hub", "ready_for_shipment", "assigned_to_shipment"] },
   { key: "transit", label: "On the way", statuses: ["shipped", "in_transit", "customs", "arrived_bd", "received_by_partner", "preparing_for_delivery", "out_for_delivery"] },
   { key: "delivered", label: "Delivered", statuses: ["delivered"] },
@@ -58,7 +59,7 @@ export const ORDER_TABS: { key: string; label: string; statuses: OrderStatus[] |
 
 /** The journey rail: six legs every order travels. */
 export const JOURNEY: { key: string; label: string; statuses: OrderStatus[] }[] = [
-  { key: "confirm", label: "Confirm", statuses: ["new", "confirmation_pending", "customer_unreachable", "needs_amendment"] },
+  { key: "confirm", label: "Confirm", statuses: ["new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment"] },
   { key: "prepare", label: "Prepare", statuses: ["confirmed", "brand_preparing"] },
   { key: "hub", label: "Hub", statuses: ["dispatched_to_hub", "received_at_hub", "hub_issue", "ready_for_shipment", "assigned_to_shipment"] },
   { key: "shipment", label: "In transit", statuses: ["shipped", "in_transit", "customs", "arrived_bd"] },
@@ -70,8 +71,123 @@ export function journeyIndex(status: OrderStatus): number {
   return JOURNEY.findIndex((leg) => leg.statuses.includes(status));
 }
 
+/** Master status thumbnails: the full journey as compact milestones. */
+export const MASTER_RAIL: { label: string; statuses: OrderStatus[] }[] = [
+  { label: "New",                  statuses: ["new"] },
+  { label: "Brand confirmed",      statuses: ["brand_confirmed"] },
+  { label: "Fulfilment confirmed", statuses: ["confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"] },
+  { label: "Shipped to hub",       statuses: ["dispatched_to_hub"] },
+  { label: "Received at hub",      statuses: ["received_at_hub", "hub_issue", "ready_for_shipment"] },
+  { label: "Dispatched",           statuses: ["assigned_to_shipment", "shipped", "in_transit", "customs"] },
+  { label: "Arrived bd",           statuses: ["arrived_bd", "received_by_partner", "preparing_for_delivery"] },
+  { label: "Out for delivery",     statuses: ["out_for_delivery", "delivery_failed", "returned"] },
+  { label: "Delivered",            statuses: ["delivered"] },
+];
+
+export function masterRailIndex(status: OrderStatus): number {
+  return MASTER_RAIL.findIndex((m) => m.statuses.includes(status));
+}
+
+export type ColumnStatus = { label: string; group: StatusGroup };
+
+/** Brand column: only what the brand has done. New → Confirmed → Shipped to hub. */
+const BRAND_COLUMN: Record<OrderStatus, ColumnStatus> = {
+  new:                    { label: "New", group: "brand" },
+  brand_confirmed:        { label: "Confirmed", group: "confirming" },
+  confirmation_pending:   { label: "Confirmed", group: "confirming" },
+  customer_unreachable:   { label: "Confirmed", group: "confirming" },
+  needs_amendment:        { label: "Amendment", group: "brand" },
+  confirmed:              { label: "Confirmed", group: "brand" },
+  cancelled:              { label: "Cancelled", group: "closed" },
+  brand_preparing:        { label: "Confirmed", group: "brand" },
+  dispatched_to_hub:      { label: "Shipped to hub", group: "hub" },
+  received_at_hub:        { label: "Shipped to hub", group: "hub" },
+  hub_issue:              { label: "Hub issue", group: "problem" },
+  ready_for_shipment:     { label: "Shipped to hub", group: "hub" },
+  assigned_to_shipment:   { label: "Shipped to hub", group: "hub" },
+  shipped:                { label: "Shipped to hub", group: "transit" },
+  in_transit:             { label: "Shipped to hub", group: "transit" },
+  customs:                { label: "Shipped to hub", group: "transit" },
+  arrived_bd:             { label: "Shipped to hub", group: "transit" },
+  received_by_partner:    { label: "Shipped to hub", group: "transit" },
+  preparing_for_delivery: { label: "Shipped to hub", group: "transit" },
+  out_for_delivery:       { label: "Shipped to hub", group: "transit" },
+  delivered:              { label: "Shipped to hub", group: "done" },
+  delivery_failed:        { label: "Delivery failed", group: "problem" },
+  returned:               { label: "Returned", group: "problem" },
+  hold:                   { label: "On hold", group: "problem" },
+};
+
+export function brandStatus(status: OrderStatus): ColumnStatus {
+  return BRAND_COLUMN[status];
+}
+
+/** Fulfilment column: the delivery partner's view of the order. */
+const FULFILMENT_COLUMN: Record<OrderStatus, ColumnStatus> = {
+  new:                    { label: "New", group: "confirming" },
+  brand_confirmed:        { label: "Confirm from brand", group: "confirming" },
+  confirmation_pending:   { label: "Confirm from brand", group: "confirming" },
+  customer_unreachable:   { label: "Confirm from brand", group: "confirming" },
+  needs_amendment:        { label: "Amendment + addition", group: "brand" },
+  confirmed:              { label: "Confirmed by Fulfilment", group: "brand" },
+  cancelled:              { label: "Cancelled", group: "closed" },
+  brand_preparing:        { label: "Out for delivery", group: "brand" },
+  dispatched_to_hub:      { label: "Out for delivery", group: "hub" },
+  received_at_hub:        { label: "Out for delivery", group: "hub" },
+  hub_issue:              { label: "Hub issue", group: "problem" },
+  ready_for_shipment:     { label: "Out for delivery", group: "hub" },
+  assigned_to_shipment:   { label: "Out for delivery", group: "hub" },
+  shipped:                { label: "Out for delivery", group: "transit" },
+  in_transit:             { label: "Out for delivery", group: "transit" },
+  customs:                { label: "Out for delivery", group: "transit" },
+  arrived_bd:             { label: "Out for delivery", group: "transit" },
+  received_by_partner:    { label: "Out for delivery", group: "transit" },
+  preparing_for_delivery: { label: "Out for delivery", group: "transit" },
+  out_for_delivery:       { label: "Out for delivery", group: "transit" },
+  delivered:              { label: "Delivered", group: "done" },
+  delivery_failed:        { label: "Delivery failed", group: "problem" },
+  returned:               { label: "Returned", group: "problem" },
+  hold:                   { label: "On hold", group: "problem" },
+};
+
+export function fulfilmentStatus(status: OrderStatus): ColumnStatus {
+  return FULFILMENT_COLUMN[status];
+}
+
+/** Master column: the full end-to-end journey. */
+const MASTER_COLUMN: Record<OrderStatus, ColumnStatus> = {
+  new:                    { label: "New", group: "brand" },
+  brand_confirmed:        { label: "Brand confirmed", group: "confirming" },
+  confirmation_pending:   { label: "Fulfilment verified", group: "confirming" },
+  customer_unreachable:   { label: "Fulfilment verified", group: "confirming" },
+  needs_amendment:        { label: "Needs amendment", group: "brand" },
+  confirmed:              { label: "Fulfilment verified", group: "brand" },
+  cancelled:              { label: "Cancelled", group: "closed" },
+  brand_preparing:        { label: "Fulfilment verified", group: "brand" },
+  dispatched_to_hub:      { label: "Shipped to hub", group: "hub" },
+  received_at_hub:        { label: "Received at hub", group: "hub" },
+  hub_issue:              { label: "Hub issue", group: "problem" },
+  ready_for_shipment:     { label: "Received at hub", group: "hub" },
+  assigned_to_shipment:   { label: "Dispatched", group: "hub" },
+  shipped:                { label: "Dispatched", group: "transit" },
+  in_transit:             { label: "Dispatched", group: "transit" },
+  customs:                { label: "Dispatched", group: "transit" },
+  arrived_bd:             { label: "Arrived bd", group: "transit" },
+  received_by_partner:    { label: "Arrived bd", group: "transit" },
+  preparing_for_delivery: { label: "Arrived bd", group: "transit" },
+  out_for_delivery:       { label: "Out for delivery", group: "transit" },
+  delivered:              { label: "Delivered", group: "done" },
+  delivery_failed:        { label: "Delivery failed", group: "problem" },
+  returned:               { label: "Returned", group: "problem" },
+  hold:                   { label: "On hold", group: "problem" },
+};
+
+export function masterStatus(status: OrderStatus): ColumnStatus {
+  return MASTER_COLUMN[status];
+}
+
 /** Brand-side rules, mirroring the database (the database is still the authority). */
-export const BRAND_EDITABLE: OrderStatus[] = ["new", "confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"];
+export const BRAND_EDITABLE: OrderStatus[] = ["new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"];
 export const BRAND_CANCELLABLE: OrderStatus[] = BRAND_EDITABLE;
 export const BRAND_DISPATCHABLE: OrderStatus[] = ["confirmed", "brand_preparing"];
 

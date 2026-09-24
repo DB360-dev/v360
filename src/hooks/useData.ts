@@ -115,7 +115,7 @@ export function useNeedsAttention(brandId: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("order_overview").select("*").eq("brand_id", brandId)
-        .in("status", ["needs_amendment", "hub_issue", "confirmed", "brand_preparing"])
+        .in("status", ["new", "needs_amendment", "hub_issue", "confirmed", "brand_preparing"])
         .order("status_changed_at", { ascending: true }).limit(8);
       if (error) throw error;
       return (data ?? []) as OrderOverview[];
@@ -222,7 +222,7 @@ export function useBrandConfirmOrder(brandId: string, orderId: string, opts?: Ac
   return useBrandAction(
     brandId,
     () => rpc<void>("brand_confirm_order", { p_order_id: orderId }),
-    () => "Order confirmed by brand",
+    () => "Order marked as brand confirmed",
     opts,
   );
 }
@@ -259,6 +259,17 @@ export function useCancelOrder(brandId: string, opts?: ActionOptions) {
   );
 }
 
+/** Generic status move via change_order_status (reason handled by caller if the target requires one). */
+export function useChangeOrderStatus(brandId: string, opts?: ActionOptions) {
+  return useBrandAction(
+    brandId,
+    (v: { id: string; to: OrderStatus; note?: string | null }) =>
+      rpc<null>("change_order_status", { p_order_id: v.id, p_to: v.to, p_note: v.note?.trim() || null }),
+    (_r, v) => `Order moved to ${v.to.replace(/_/g, " ")}`,
+    opts,
+  );
+}
+
 export function useUpdateBatch(brandId: string, opts?: ActionOptions) {
   return useBrandAction(
     brandId,
@@ -283,6 +294,39 @@ export function useConnectShopify(brandId: string) {
     },
     onSuccess: (url) => { window.location.assign(url); },
     onError: (e) => { toast.error(describeError(e)); },
+  });
+}
+
+export function useDisconnectShopify(brandId: string) {
+  return useBrandAction(
+    brandId,
+    () => rpc<void>("disconnect_shopify", { p_brand_id: brandId }),
+    () => "Shopify store disconnected. New orders will stop coming in.",
+  );
+}
+
+export interface ShopifySyncResult {
+  fetched: number; created: number; updated: number; cancelled: number;
+  skipped: number; unchanged: number; flagged: number; errors: number;
+}
+
+export function useSyncShopify(brandId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("shopify-sync", { body: { brand_id: brandId } });
+      if (error) throw new Error(await describeFunctionError(error));
+      return data as ShopifySyncResult;
+    },
+    onSuccess: (r) => {
+      const bits: string[] = [];
+      if (r.created) bits.push(`${plural(r.created, "new order")}`);
+      if (r.updated) bits.push(`${plural(r.updated, "update")}`);
+      if (r.cancelled) bits.push(`${plural(r.cancelled, "cancellation")}`);
+      toast.success(bits.length ? `Shopify sync finished: ${bits.join(", ")}.` : "Shopify is up to date. No new order changes.");
+    },
+    onError: (e) => { toast.error(describeError(e)); },
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.all(brandId) }),
   });
 }
 

@@ -3,11 +3,11 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Inbox, Search, Upload, X } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
 import { PAGE_SIZE, useMarkPreparing, useOrders, useStatusCounts } from "@/hooks/useData";
-import { BRAND_DISPATCHABLE, ORDER_TABS } from "@/lib/status";
+import { BRAND_DISPATCHABLE, ORDER_TABS, brandStatus, fulfilmentStatus, masterStatus } from "@/lib/status";
 import { fmtMoney, fmtShort, plural, since } from "@/lib/format";
 import type { OrderOverview } from "@/lib/types";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Pill } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
@@ -141,7 +141,7 @@ export function Orders() {
 
       <div className="panel overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-[13.5px]">
+          <table className="w-full min-w-[1100px] text-[13.5px]">
             <thead className="table-head">
               <tr>
                 <th className="w-10">
@@ -149,13 +149,16 @@ export function Orders() {
                     indeterminate={!allSelected && selected.size > 0} disabled={selectable.length === 0} onChange={toggleAll} />
                 </th>
                 <th>Order</th><th>Date</th><th>Customer</th><th className="text-right">Items</th>
-                <th className="text-right">COD</th><th>Status</th><th>Tracking</th>
+                <th className="text-right">COD</th><th>Fulfilment status</th><th>Brand status</th><th>Master status</th><th>Tracking</th>
               </tr>
             </thead>
-            {q.isLoading ? <SkeletonRows cols={8} /> : (
+            {q.isLoading ? <SkeletonRows cols={10} /> : (
               <tbody className={`table-body ${q.isFetching && !q.isLoading ? "opacity-70" : ""}`}>
                 {rows.map((o) => {
                   const canSelect = BRAND_DISPATCHABLE.includes(o.status);
+                  const fulfilment = fulfilmentStatus(o.status);
+                  const brand = brandStatus(o.status);
+                  const master = masterStatus(o.status);
                   return (
                     <tr key={o.id} onClick={() => navigate(`/orders/${o.id}`)} className="cursor-pointer hover:bg-sunken/50">
                       <td onClick={(e) => e.stopPropagation()}>
@@ -170,9 +173,11 @@ export function Orders() {
                       </td>
                       <td className="text-right">{o.item_count}</td>
                       <td className="whitespace-nowrap text-right">{fmtMoney(o.cod_amount_expected ?? o.order_total, o.cod_currency ?? o.currency)}</td>
+                      <td><Pill group={fulfilment.group} label={fulfilment.label} /></td>
+                      <td><Pill group={brand.group} label={brand.label} /></td>
                       <td>
                         <div className="flex items-center gap-2">
-                          <StatusBadge status={o.status} />
+                          <Pill group={master.group} label={master.label} />
                           <span className="text-[12px] text-faint" title="Time in this status">{since(o.status_changed_at)}</span>
                         </div>
                       </td>

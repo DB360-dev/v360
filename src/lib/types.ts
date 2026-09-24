@@ -1,5 +1,5 @@
 export type OrderStatus =
-  | "new" | "confirmation_pending" | "customer_unreachable" | "needs_amendment" | "confirmed" | "cancelled"
+  | "new" | "brand_confirmed" | "confirmation_pending" | "customer_unreachable" | "needs_amendment" | "confirmed" | "cancelled"
   | "brand_preparing" | "dispatched_to_hub" | "received_at_hub" | "hub_issue" | "ready_for_shipment"
   | "assigned_to_shipment" | "shipped" | "in_transit" | "customs" | "arrived_bd" | "received_by_partner"
   | "preparing_for_delivery" | "out_for_delivery" | "delivered" | "delivery_failed" | "returned" | "hold";
@@ -69,6 +69,7 @@ export interface OrderOverview {
   cod_currency: string | null; confirmation_attempts: number; inbound_courier: string | null; inbound_tracking: string | null;
   shipment_code: string | null; shipment_tracking: string | null; shipping_partner: string | null;
   delivery_courier: string | null; delivery_tracking_number: string | null; delivered_at: string | null; item_count: number;
+  brand_confirmed_at: string | null;
 }
 
 export interface ShopifyConnection {

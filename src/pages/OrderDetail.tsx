@@ -1,21 +1,21 @@
 import { useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, Ban, MessageSquare, PackageCheck, Pencil, Truck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, Pencil, Truck } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
-import { useBrandConfirmOrder, useLatestFxRate, useMarkPreparing, useOrder, useOrderEvents } from "@/hooks/useData";
-import { BRAND_CANCELLABLE, BRAND_DISPATCHABLE, BRAND_EDITABLE, INBOUND_STATUS, SHIPMENT_STATUS_LABEL, STATUS } from "@/lib/status";
+import { useBrandConfirmOrder, useChangeOrderStatus, useLatestFxRate, useMarkPreparing, useOrder, useOrderEvents } from "@/hooks/useData";
+import { BRAND_DISPATCHABLE, BRAND_EDITABLE, INBOUND_STATUS, SHIPMENT_STATUS_LABEL, STATUS } from "@/lib/status";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { neutralize } from "@/lib/neutral";
 import type { OrderDetail as TOrder, OrderEvent, OrderStatus } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Pill, StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState, ErrorState, Spinner } from "@/components/ui/States";
-import { JourneyRail } from "@/components/JourneyRail";
-import { Timeline } from "@/components/Timeline";
+import { MasterRail } from "@/components/MasterRail";
 import { OrderMessages } from "@/components/OrderMessages";
 import { DispatchDialog } from "@/components/DispatchDialog";
 import { EditOrderDialog } from "@/components/EditOrderDialog";
 import { CancelOrderDialog } from "@/components/CancelOrderDialog";
+import { StatusChangeDialog } from "@/components/StatusChangeDialog";
 
 function Section({ title, children, aside }: { title: string; children: ReactNode; aside?: ReactNode }) {
   return (
@@ -44,6 +44,58 @@ function Facts({ rows }: { rows: [string, ReactNode][] }) {
 function latestNote(events: OrderEvent[] | undefined, status: OrderStatus): string | null {
   const note = events?.find((e) => e.to_status === status)?.note;
   return note ? neutralize(note) : null;
+}
+
+/** Brand-acting statuses this brand can move an order through while it's still at the brand. */
+const BRAND_ACTORS: OrderStatus[] = ["new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"];
+/** Targets the brand may set via change_order_status (granted in migration 014). */
+const BRAND_TARGETS: OrderStatus[] = ["confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing", "cancelled"];
+
+/** Statuses this brand may move an order to right now, in order. Empty = no moves. */
+const STATUS_MOVES: Record<OrderStatus, { to: OrderStatus; label: string }[]> = Object.fromEntries(
+  Object.keys(STATUS).map((s) => {
+    const status = s as OrderStatus;
+    const moves = BRAND_ACTORS.includes(status)
+      ? [
+          ...(status === "new" ? [{ to: "brand_confirmed" as OrderStatus, label: "Brand confirmed" }] : []),
+          ...BRAND_TARGETS.filter((t) => t !== status).map((t) => ({ to: t, label: STATUS[t].label })),
+        ]
+      : [];
+    return [status, moves];
+  }),
+) as Record<OrderStatus, { to: OrderStatus; label: string }[]>;
+
+function StatusMovesDropdown({ status, onPick, disabled }: {
+  status: OrderStatus;
+  onPick: (to: OrderStatus) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const moves = STATUS_MOVES[status] ?? [];
+  if (moves.length === 0) return null;
+  return (
+    <div className="relative">
+      <Button variant="primary" disabled={disabled} onClick={() => setOpen((v) => !v)}>
+        Update status <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+      </Button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-30 mt-1 min-w-[180px] overflow-hidden rounded-lg border border-line bg-surface py-1 shadow-lg">
+            {moves.map((m) => (
+              <button
+                key={m.to}
+                onClick={() => { setOpen(false); onPick(m.to); }}
+                className="block w-full px-3 py-2 text-left text-[13.5px] text-ink hover:bg-sunken"
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function Banner({ tone, title, children }: { tone: "brand" | "problem"; title: string; children?: ReactNode }) {
@@ -79,15 +131,22 @@ export function OrderDetail() {
   const q = useOrder(brand.id, id);
   const ev = useOrderEvents(brand.id, id);
   const markPreparing = useMarkPreparing(brand.id);
+  const changeOrderStatus = useChangeOrderStatus(brand.id);
   const [dialog, setDialog] = useState<"edit" | "dispatch" | "cancel" | null>(null);
-  const [tab, setTab] = useState<"timeline" | "messages">("timeline");
+  const [statusTo, setStatusTo] = useState<OrderStatus | null>(null);
 
-  // FX rate: convert order currency → BDT (most common: PKR → BDT)
-  // Fetched from the shared fx_rates table managed by the admin portal.
-  const orderCurrency = (q.data?.currency ?? "PKR").toUpperCase();
-  const fxQ = useLatestFxRate(orderCurrency, "BDT");
+  // FX rate: the admin sets 1 PKR = N BDT in the shared fx_rates table.
+  // PKR amounts convert to BDT; BDT amounts convert back to PKR.
+  const fxQ = useLatestFxRate("PKR", "BDT");
   const fxRate = fxQ.data?.rate ?? null;
   const fxDate = fxQ.data?.rate_date ?? null;
+  const fxApprox = (amount: number | null | undefined, currency: string | null | undefined): string | null => {
+    if (!fxRate || !amount) return null;
+    const c = (currency ?? "PKR").toUpperCase();
+    if (c === "PKR") return fmtMoney(amount * fxRate, "BDT");
+    if (c === "BDT") return fmtMoney(amount / fxRate, "PKR");
+    return null;
+  };
 
   // Brand confirmation — instantiate with a placeholder id; hook is guarded by enabled
   const brandConfirm = useBrandConfirmOrder(brand.id, id);
@@ -124,23 +183,33 @@ export function OrderDetail() {
           <p className="mt-1.5 max-w-2xl text-[14px] text-muted">{s.hint}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <StatusMovesDropdown
+            status={o.status}
+            disabled={brandConfirm.isPending || markPreparing.isPending || changeOrderStatus.isPending}
+            onPick={(to) => {
+              if (to === "brand_confirmed") brandConfirm.mutate();
+              else if (to === "brand_preparing") markPreparing.mutate([o.id]);
+              else if (to === "cancelled") setDialog("cancel");
+              else if (to === "needs_amendment") setStatusTo(to);
+              else changeOrderStatus.mutate({ id: o.id, to });
+            }}
+          />
           {canEdit && <Button onClick={() => setDialog("edit")}><Pencil className="h-4 w-4" /> Edit details</Button>}
-          {o.status === "confirmed" && (
-            <Button loading={markPreparing.isPending} onClick={() => markPreparing.mutate([o.id])}><PackageCheck className="h-4 w-4" /> Mark preparing</Button>
-          )}
           {canDispatch && <Button variant="primary" onClick={() => setDialog("dispatch")}><Truck className="h-4 w-4" /> Dispatch to hub</Button>}
-          {BRAND_CANCELLABLE.includes(o.status) && (
-            <Button variant="ghost" onClick={() => setDialog("cancel")} className="text-danger hover:text-danger"><Ban className="h-4 w-4" /> Cancel</Button>
-          )}
         </div>
       </header>
 
       <Banners order={o} events={ev.data} />
 
-      <div className="panel mb-6 px-3 py-5 sm:px-6"><JourneyRail status={o.status} previousStatus={o.previous_status} /></div>
+      <div className="panel mb-6 px-3 py-5 sm:px-6">
+        <div className="mb-3 flex items-center gap-2 px-1">
+          <h2 className="text-[12.5px] font-semibold uppercase tracking-wide text-muted">Master Status</h2>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        {ev.isLoading ? <Spinner /> : ev.isError ? <ErrorState error={ev.error} onRetry={() => ev.refetch()} /> : <MasterRail status={o.status} previousStatus={o.previous_status} />}
+      </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-        <div className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-6">
           <Section title="Items">
             <div className="-m-4 overflow-x-auto">
               <table className="w-full min-w-[520px] text-[13.5px]">
@@ -182,19 +251,19 @@ export function OrderDetail() {
                 ["Subtotal",
                   <span key="sub" className="inline-flex flex-wrap items-baseline gap-2">
                     {fmtMoney(o.subtotal, o.currency)}
-                    {fxRate && o.subtotal ? <span className="text-[12.5px] text-muted">≈ {fmtMoney(o.subtotal * fxRate, "BDT")}</span> : null}
+                    {fxApprox(o.subtotal, o.currency) && <span className="text-[12.5px] text-muted">≈ {fxApprox(o.subtotal, o.currency)}</span>}
                   </span>],
                 ["Discount", o.discount_total ? `−${fmtMoney(o.discount_total, o.currency)}` : "—"],
                 ["Shipping", fmtMoney(o.shipping_total, o.currency)],
                 ["Order total",
                   <span key="t" className="inline-flex flex-wrap items-baseline gap-2">
                     <strong>{fmtMoney(o.order_total, o.currency)}</strong>
-                    {fxRate && o.order_total ? <span className="text-[12.5px] text-muted">≈ {fmtMoney(o.order_total * fxRate, "BDT")}</span> : null}
+                    {fxApprox(o.order_total, o.currency) && <span className="text-[12.5px] text-muted">≈ {fxApprox(o.order_total, o.currency)}</span>}
                   </span>],
                 ["Cash to collect",
                   <span key="cod" className="inline-flex flex-wrap items-baseline gap-2">
                     {fmtMoney(o.cod_amount_expected, cod)}
-                    {fxRate && o.cod_amount_expected ? <span className="text-[12.5px] text-muted">≈ {fmtMoney(o.cod_amount_expected * fxRate, "BDT")}</span> : null}
+                    {fxApprox(o.cod_amount_expected, cod) && <span className="text-[12.5px] text-muted">≈ {fxApprox(o.cod_amount_expected, cod)}</span>}
                   </span>],
                 ["Cash collected", o.cod_amount_collected !== null
                   ? <span key="c" className={o.cod_amount_expected !== null && o.cod_amount_collected < o.cod_amount_expected ? "font-medium text-g-problem" : "font-medium"}>{fmtMoney(o.cod_amount_collected, cod)}</span>
@@ -202,56 +271,24 @@ export function OrderDetail() {
               ]} />
               {fxRate && fxDate && (
                 <p className="mt-3 text-[11.5px] text-faint">
-                  BDT figures use rate 1 {orderCurrency} = {fxRate} BDT (set {fxDate} by V360)
+                  Converted figures use the rate 1 PKR = {fxRate} BDT (set {fxDate} by the admin team).
                 </p>
               )}
-              {!fxRate && orderCurrency !== "BDT" && !fxQ.isLoading && (
+              {!fxRate && !fxQ.isLoading && (
                 <p className="mt-3 text-[11.5px] text-faint">
-                  No {orderCurrency} → BDT rate set yet — contact the V360 team.
+                  No PKR → BDT rate set yet — converted amounts aren't shown.
                 </p>
               )}
             </Section>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <Section title="Brand confirmation">
-              <div className="space-y-3">
-                {o.brand_confirmed_at ? (
-                  <>
-                    <div className="flex items-center gap-2.5">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-g-done-bg">
-                        <svg className="h-3 w-3 text-g-done" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                      <span className="text-[13.5px] font-medium text-g-done">Confirmed by your team</span>
-                    </div>
-                    <p className="text-[12.5px] text-faint">{fmtDateTime(o.brand_confirmed_at)}</p>
-                  </>
-                ) : (
-                  <>
-                    <label className="flex cursor-pointer items-start gap-3">
-                      <input
-                        type="checkbox"
-                        className="mt-0.5 h-4 w-4 cursor-pointer rounded border-line accent-primary"
-                        checked={false}
-                        disabled={brandConfirm.isPending}
-                        onChange={() => brandConfirm.mutate()}
-                      />
-                      <span className="text-[13.5px] leading-snug">
-                        <span className="font-medium">I confirm this order is correct</span>
-                        <br />
-                        <span className="text-faint">Tick this once you've verified the items and customer details. This is visible to the V360 team.</span>
-                      </span>
-                    </label>
-                    {brandConfirm.isPending && <p className="text-[12.5px] text-muted">Saving…</p>}
-                  </>
-                )}
-              </div>
+            <Section title="Messages" aside={undefined}>
+              <OrderMessages orderId={o.id} />
             </Section>
-            <Section title="Customer confirmation">
+            <Section title="Fulfilment confirmation">
               <Facts rows={[
-                ["Status", o.confirmed_at ? "Confirmed" : s.label],
+                ["Status", o.confirmed_at ? "Fulfilment confirmed" : (o.status === "brand_confirmed" ? "Waiting for the delivery partner" : s.label)],
                 ["Confirmed", fmtDateTime(o.confirmed_at)],
                 ["Call attempts", o.confirmation_attempts || "—"],
               ]} />
@@ -292,40 +329,12 @@ export function OrderDetail() {
           </div>
         </div>
 
-        <aside className="xl:sticky xl:top-6 xl:self-start">
-          <Section
-            title=""
-            aside={undefined}
-          >
-            {/* Tab bar */}
-            <div className="-mx-4 -mt-4 mb-4 flex border-b border-line">
-              {(["timeline", "messages"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTab(t)}
-                  className={`flex items-center gap-1.5 px-4 py-2.5 text-[13.5px] font-medium transition-colors ${
-                    tab === t
-                      ? "border-b-2 border-primary text-ink"
-                      : "text-muted hover:text-ink"
-                  }`}
-                >
-                  {t === "messages" && <MessageSquare className="h-3.5 w-3.5" />}
-                  {t === "timeline" ? "Timeline" : "Messages"}
-                </button>
-              ))}
-            </div>
-            {tab === "timeline"
-              ? (ev.isLoading ? <Spinner /> : ev.isError ? <ErrorState error={ev.error} onRetry={() => ev.refetch()} /> : <Timeline events={ev.data!} />)
-              : <OrderMessages orderId={o.id} />
-            }
-          </Section>
-          <p className="mt-3 px-1 text-[12.5px] text-faint">Shopify order ID {o.shopify_order_id}. Imported {fmtDateTime(o.created_at)}.</p>
-        </aside>
-      </div>
+        <p className="text-[12.5px] text-faint">Shopify order ID {o.shopify_order_id}. Imported {fmtDateTime(o.created_at)}.</p>
 
       <EditOrderDialog order={o} open={dialog === "edit"} onClose={() => setDialog(null)} />
       <CancelOrderDialog order={o} open={dialog === "cancel"} onClose={() => setDialog(null)} />
       <DispatchDialog brandId={brand.id} orders={[o]} open={dialog === "dispatch"} onClose={() => setDialog(null)} />
+      {statusTo && <StatusChangeDialog order={o} to={statusTo} open={!!statusTo} onClose={() => setStatusTo(null)} />}
     </>
   );
 }
