@@ -9,6 +9,8 @@ import { useBrandRealtime } from "@/hooks/useRealtime";
 import { useOnline } from "@/hooks/useOnline";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { APP_INITIAL, APP_NAME } from "@/lib/app";
+import { NotificationBanner } from "./NotificationBanner";
+import { NotificationToggle, NotificationPanel } from "./NotificationArea";
 
 const NAV = [
   { to: "/", label: "Overview", icon: Home, end: true },
@@ -113,10 +115,30 @@ export function Layout() {
     <div className="min-h-screen lg:grid lg:grid-cols-[236px_1fr] print:block">
       <aside className="sticky top-0 hidden h-screen print:!hidden border-r border-line bg-surface lg:block"><Sidebar /></aside>
 
-      <div className="sticky top-0 z-20 flex items-center gap-3 print:hidden border-b border-line bg-surface px-4 py-2.5 lg:hidden">
-        <button onClick={() => setOpen(true)} className="rounded p-1.5 hover:bg-sunken" aria-label="Open menu"><Menu className="h-5 w-5" /></button>
-        <span className="truncate font-semibold">{brand.name}</span>
+      {/* Desktop Top Header */}
+      <header className="sticky top-0 z-20 hidden items-center justify-between border-b border-line bg-surface/90 px-6 py-3 backdrop-blur-md lg:flex print:!hidden">
+        <div className="flex items-center gap-3">
+          <h2 className="text-[15px] font-semibold text-ink">{brand.name}</h2>
+          <span className="rounded bg-sunken px-2 py-0.5 text-[11.5px] font-medium text-muted">Brand Portal</span>
+        </div>
+        <div className="relative flex items-center gap-3">
+          <NotificationToggle />
+          <NotificationPanel />
+        </div>
+      </header>
+
+      {/* Mobile Top Header */}
+      <div className="sticky top-0 z-20 flex items-center justify-between border-b border-line bg-surface px-4 py-2.5 lg:hidden print:hidden">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={() => setOpen(true)} className="rounded p-1.5 hover:bg-sunken" aria-label="Open menu"><Menu className="h-5 w-5" /></button>
+          <span className="truncate font-semibold">{brand.name}</span>
+        </div>
+        <div className="relative flex items-center gap-2">
+          <NotificationToggle />
+          <NotificationPanel />
+        </div>
       </div>
+
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-[rgb(var(--shadow)/0.45)]" onClick={() => setOpen(false)} />
@@ -134,6 +156,7 @@ export function Layout() {
           </div>
         )}
         <div className="mx-auto max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <NotificationBanner />
           <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
         </div>
       </main>
