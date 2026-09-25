@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { describeError, describeFunctionError } from "@/lib/errors";
 import type {
-  FulfillmentSource, FxRate, InboundBatchOverview, InventoryItem, Order, OrderDetail, OrderEvent, OrderItem,
+  FxRate, InboundBatchOverview, InventoryItem, Order, OrderDetail, OrderEvent, OrderItem,
   OrderMessage, OrderOverview, OrderStatus, ShopifyConnection,
 } from "@/lib/types";
 import { plural } from "@/lib/format";
@@ -24,6 +24,7 @@ export const keys = {
   attention: (brandId: string) => ["brand", brandId, "attention"] as const,
   inventory: (brandId: string) => ["brand", brandId, "inventory"] as const,
   localOrders: (brandId: string) => ["brand", brandId, "localOrders"] as const,
+  inventoryOrders: (brandId: string) => ["brand", brandId, "inventoryOrders"] as const,
   dispatchItems: (brandId: string, ids: string) => ["brand", brandId, "dispatchItems", ids] as const,
   shopify: (brandId: string) => ["brand", brandId, "shopify"] as const,
   messages: (brandId: string, orderId: string) => ["brand", brandId, "messages", orderId] as const,
@@ -166,25 +167,51 @@ export function useRemoveInventory(brandId: string, opts?: ActionOptions) {
   );
 }
 
-export interface InventoryOrder {
-  id: string; order_number: string; order_date: string; status: OrderStatus; status_changed_at: string;
+export interface RestockedItem {
+  order_item_id: string; order_id: string; order_number: string; order_date: string;
+  status: OrderStatus; returned_at: string | null; brand_id: string; brand_name: string;
   customer_name: string | null; city: string | null; order_total: number; currency: string;
-  /** Only the lines fulfilled from local inventory. */
-  order_items: OrderItem[];
+  return_disposition: string | null; restocked_at: string | null; restock_note: string | null;
+  product_name: string; sku: string | null; variant: string | null;
+  quantity: number; dispatched_qty: number; available_qty: number;
+  unit_price: number; discount: number; line_total: number;
 }
 
-/** The brand's own orders that are fulfilled from local inventory (one or more lines marked "bangladesh"). */
-export function useInventoryOrders(brandId: string) {
+export interface InventoryOrder {
+  brand_id: string; brand_name: string; order_id: string; order_number: string; order_date: string;
+  customer_name: string | null; city: string | null; status: OrderStatus;
+  order_item_id: string; product_name: string; sku: string | null; variant: string | null;
+  inventory_qty: number; quantity: number;
+}
+
+/** The brand's own order lines that are in local inventory, i.e. restocked in the country. */
+export function useRestockedOrders(brandId: string) {
   return useQuery({
     queryKey: keys.localOrders(brandId),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("orders")
-        .select("id, order_number, order_date, status, status_changed_at, customer_name, city, order_total, currency, order_items!inner(*)")
+        .from("bd_restocked_items")
+        .select("*")
         .eq("brand_id", brandId)
-        .eq("order_items.fulfillment_source", "bangladesh")
-        .order("order_date", { ascending: false })
+        .order("restocked_at", { ascending: false })
         .limit(200);
+      if (error) throw error;
+      return (data ?? []) as RestockedItem[];
+    },
+  });
+}
+
+/** Orders that fulfilled one or more items from local BD inventory. */
+export function useInventoryOrders(brandId: string) {
+  return useQuery({
+    queryKey: keys.inventoryOrders(brandId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brand_inventory_usage")
+        .select("*")
+        .eq("brand_id", brandId)
+        .order("order_date", { ascending: false })
+        .limit(500);
       if (error) throw error;
       return (data ?? []) as InventoryOrder[];
     },
@@ -311,8 +338,8 @@ export function useBrandConfirmOrder(brandId: string, orderId: string, opts?: Ac
 
 export interface DispatchInput {
   orderIds: string[]; courier: string; tracking: string; date: string; notes: string;
-  /** Per order_item id → where it's fulfilled from. Omitted items default to "pakistan". */
-  itemSources?: Record<string, FulfillmentSource>;
+  /** Per order_item id → how many units come from BD local inventory (0 = all from Pakistan). */
+  itemSources?: Record<string, number>;
 }
 
 export function useDispatch(brandId: string, opts?: ActionOptions) {

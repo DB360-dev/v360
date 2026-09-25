@@ -38,7 +38,7 @@ export type FulfillmentSource = "pakistan" | "bangladesh";
 export interface OrderItem {
   id: string; order_id: string; product_name: string; sku: string | null; variant: string | null;
   quantity: number; unit_price: number; discount: number; received_quantity: number;
-  fulfillment_source: FulfillmentSource;
+  fulfillment_source: FulfillmentSource; inventory_qty: number;
 }
 
 /** A brand's stock already in the customer's country (local inventory). */

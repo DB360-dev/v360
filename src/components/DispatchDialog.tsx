@@ -4,9 +4,9 @@ import { Dialog } from "./ui/Dialog";
 import { Button } from "./ui/Button";
 import { TextArea, TextField } from "./ui/Field";
 import { Spinner } from "./ui/States";
-import { useDispatch, useDispatchItems, useInventory } from "@/hooks/useData";
+import { useDispatch, useDispatchItems, useInventory, useRestockedOrders } from "@/hooks/useData";
 import { plural, todayISO } from "@/lib/format";
-import type { FulfillmentSource, OrderItem } from "@/lib/types";
+import type { OrderItem } from "@/lib/types";
 
 const COURIERS = ["TCS", "Leopards", "M&P", "Trax", "PostEx", "Hand delivery"];
 
@@ -22,24 +22,45 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
   const dispatch = useDispatch(brandId, { inlineErrors: true });
   const items = useDispatchItems(brandId, open ? orders.map((o) => o.id) : []);
   const inventory = useInventory(brandId);
+  const restocked = useRestockedOrders(brandId);
   const [courier, setCourier] = useState("TCS");
   const [tracking, setTracking] = useState("");
   const date = todayISO();
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
-  // item id -> source. Anything absent is "pakistan".
-  const [sources, setSources] = useState<Record<string, FulfillmentSource>>({});
+  // item id -> units from BD inventory (0 = all from Pakistan, absent = 0)
+  const [sources, setSources] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (open) { dispatch.reset(); setCourier("TCS"); setTracking(""); setNotes(""); setErrors({}); setSources({}); }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const availableSkus = useMemo(
-    () => new Set((inventory.data ?? []).filter((i) => i.quantity_available > 0).map((i) => i.sku)),
-    [inventory.data],
-  );
+  // key = SKU when present, otherwise "product_name|variant"
+  const itemKey = (i: { sku: string | null; product_name: string; variant: string | null }) =>
+    i.sku ?? `${i.product_name}|${i.variant ?? ""}`;
+
+  // Total available quantity per key, combining brand_inventory + SKU-less restocked returns.
+  // SKU items are already reflected in brand_inventory (trigger keeps it in sync), so we
+  // only add restocked items for SKU-less lines to avoid double-counting.
+  const availableQtyMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const inv of inventory.data ?? []) {
+      if (inv.quantity_available > 0) map.set(inv.sku, (map.get(inv.sku) ?? 0) + inv.quantity_available);
+    }
+    for (const r of restocked.data ?? []) {
+      if (r.sku) continue; // SKU items are already in brand_inventory
+      const avail = r.available_qty ?? r.quantity;
+      if (avail > 0) {
+        const k = itemKey(r);
+        map.set(k, (map.get(k) ?? 0) + avail);
+      }
+    }
+    return map;
+  }, [inventory.data, restocked.data]);
+
   const byOrder = useMemo(() => (items.data ?? []).filter((o) => orders.some((s) => s.id === o.id)), [items.data, orders]);
-  const inventoryCount = Object.values(sources).filter((s) => s === "bangladesh").length;
+  const allItems = useMemo(() => byOrder.flatMap((o) => o.order_items), [byOrder]);
+  const inventoryCount = Object.values(sources).filter((n) => n > 0).length;
 
   const submit = () => {
     const e: Record<string, string> = {};
@@ -48,10 +69,21 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
     if (!date) e.date = "Enter the dispatch date";
     setErrors(e);
     if (Object.keys(e).length) return;
+    // Compute clamped sources at submit time to prevent stale over-allocations
+    const clampedSources: Record<string, number> = {};
+    for (const item of allItems) {
+      const key = itemKey(item);
+      const totalAvail = availableQtyMap.get(key) ?? 0;
+      const allocatedElsewhere = allItems
+        .filter((x) => x.id !== item.id && (clampedSources[x.id] ?? 0) > 0 && itemKey(x) === key)
+        .reduce((n, x) => n + (clampedSources[x.id] ?? 0), 0);
+      const max = Math.min(item.quantity, Math.max(0, totalAvail - allocatedElsewhere));
+      clampedSources[item.id] = Math.min(sources[item.id] ?? 0, max);
+    }
     dispatch.mutate(
       {
         orderIds: orders.map((o) => o.id), courier, tracking, date, notes,
-        itemSources: Object.fromEntries(Object.entries(sources).filter(([, s]) => s === "bangladesh")),
+        itemSources: Object.fromEntries(Object.entries(clampedSources).filter(([, n]) => n > 0)),
       },
       { onSuccess: () => { onDone?.(); onClose(); } },
     );
@@ -60,8 +92,19 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
   const list = orders.map((o) => o.order_number).join(", ");
 
   const itemRow = (i: OrderItem) => {
-    const available = !!i.sku && availableSkus.has(i.sku);
-    const source = sources[i.id] ?? "pakistan";
+    const key = itemKey(i);
+    const totalAvail = availableQtyMap.get(key) ?? 0;
+    const available = totalAvail > 0;
+    const inventoryQty = sources[i.id] ?? 0;
+    // Units already allocated by other items with the same key
+    const allocatedElsewhere = allItems
+      .filter((x) => x.id !== i.id && (sources[x.id] ?? 0) > 0 && itemKey(x) === key)
+      .reduce((n, x) => n + (sources[x.id] ?? 0), 0);
+    // How many units this item can take from inventory (can't exceed what's left after others)
+    const maxForThis = Math.min(i.quantity, Math.max(0, totalAvail - allocatedElsewhere));
+    // Clamp current selection to what's actually available
+    const effectiveQty = Math.min(inventoryQty, maxForThis);
+
     return (
       <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2">
         <span className="w-9 shrink-0 text-right text-[15px] font-semibold">{i.quantity}×</span>
@@ -73,13 +116,19 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
           <span className="text-[12.5px] text-muted">{i.sku ?? "No SKU"}</span>
         </span>
         <select
-          value={source}
-          onChange={(e) => setSources((s) => ({ ...s, [i.id]: e.target.value as FulfillmentSource }))}
-          className="input h-8 w-[176px] px-2 py-0 pr-7 text-[13px]"
+          value={effectiveQty}
+          onChange={(e) => setSources((s) => ({ ...s, [i.id]: Number(e.target.value) }))}
+          className="input h-8 w-[196px] px-2 py-0 pr-7 text-[13px]"
           aria-label={`Where ${i.product_name} is fulfilled from`}
         >
-          <option value="pakistan">Fulfilled by Pakistan</option>
-          <option value="bangladesh" disabled={!available}>Fulfilled by Inventory</option>
+          <option value={0}>Fulfilled by Pakistan</option>
+          {available && Array.from({ length: maxForThis }, (_, idx) => idx + 1).map((n) => (
+            <option key={n} value={n}>
+              {n === i.quantity
+                ? "Fulfilled by Inventory"
+                : `${n} from BD inventory, ${i.quantity - n} from PK`}
+            </option>
+          ))}
         </select>
       </li>
     );
