@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { describeError, describeFunctionError } from "@/lib/errors";
 import type {
   FxRate, InboundBatchOverview, InventoryItem, Order, OrderDetail, OrderEvent, OrderItem,
-  OrderMessage, OrderOverview, OrderStatus, ShopifyConnection,
+  OrderMessage, OrderOverview, OrderStatus, ShippingInvoice, ShippingInvoiceLine, ShopifyConnection,
 } from "@/lib/types";
 import { plural } from "@/lib/format";
 
@@ -28,6 +28,8 @@ export const keys = {
   dispatchItems: (brandId: string, ids: string) => ["brand", brandId, "dispatchItems", ids] as const,
   shopify: (brandId: string) => ["brand", brandId, "shopify"] as const,
   messages: (brandId: string, orderId: string) => ["brand", brandId, "messages", orderId] as const,
+  shippingInvoices: (brandId: string) => ["brand", brandId, "shippingInvoices"] as const,
+  shippingInvoiceLines: (brandId: string, id: string) => ["brand", brandId, "shippingInvoiceLines", id] as const,
 };
 
 // ---------------------------------------------------------------- queries
@@ -256,6 +258,33 @@ export function useInboundBatches(brandId: string) {
         .order("created_at", { ascending: false }).limit(200);
       if (error) throw error;
       return (data ?? []) as InboundBatchOverview[];
+    },
+  });
+}
+
+export function useShippingInvoices(brandId: string) {
+  return useQuery({
+    queryKey: keys.shippingInvoices(brandId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brand_shipping_invoices")
+        .select("*, shipment:shipments(code, shipping_partner, tracking_number, dispatched_at)")
+        .eq("brand_id", brandId).order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as ShippingInvoice[];
+    },
+  });
+}
+
+export function useShippingInvoiceLines(brandId: string, invoiceId: string | null) {
+  return useQuery({
+    queryKey: keys.shippingInvoiceLines(brandId, invoiceId ?? "none"),
+    enabled: !!invoiceId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("brand_shipping_invoice_lines").select("*").eq("invoice_id", invoiceId!).order("order_number");
+      if (error) throw error;
+      return (data ?? []) as ShippingInvoiceLine[];
     },
   });
 }

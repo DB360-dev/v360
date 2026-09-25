@@ -105,3 +105,19 @@ export interface FxRate {
   note: string | null;
   created_at: string;
 }
+
+export type InvoicePaymentStatus = "not_paid" | "partially_paid" | "paid";
+
+export interface ShippingInvoiceLine {
+  id: number; invoice_id: string; order_id: string; order_number: string; customer_name: string | null;
+  items_summary: string | null; pk_units: number; bd_units: number; weight_kg: number; amount_pkr: number;
+}
+
+/** V360's shipping charges to the brand for one shipment — Pakistan-fulfilled units only. */
+export interface ShippingInvoice {
+  id: string; invoice_number: string; shipment_id: string; brand_id: string;
+  order_count: number; pk_units: number; bd_units: number; weight_kg: number;
+  freight_bdt_per_kg: number; fx_rate: number; fx_rate_date: string; amount_pkr: number;
+  payment_status: InvoicePaymentStatus; paid_at: string | null; created_at: string;
+  shipment?: { code: string; shipping_partner: string | null; tracking_number: string | null; dispatched_at: string | null } | null;
+}

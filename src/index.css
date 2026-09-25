@@ -92,7 +92,7 @@
   }
   .input[aria-invalid="true"] { @apply border-danger focus:ring-danger/20; }
   textarea.input { @apply h-auto py-2 min-h-[84px] resize-y; }
-  .table-head th { @apply text-left text-[12.5px] font-medium text-muted px-3 py-2 border-b border-line bg-sunken/60 whitespace-nowrap; }
+  .table-head :where(th) { @apply text-left text-[12.5px] font-medium text-muted px-3 py-2 border-b border-line bg-sunken/60 whitespace-nowrap; }
   .table-body td { @apply px-3 py-2.5 border-b border-line align-middle; }
   .table-body tr:last-child td { @apply border-b-0; }
   .link { @apply text-primary hover:underline underline-offset-2; }

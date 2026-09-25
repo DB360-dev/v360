@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Activity, Archive, Boxes, ChevronsUpDown, Home, LogOut, Menu, Monitor, Moon, PackageCheck, Settings, Sun, Truck, WifiOff, X } from "lucide-react";
+import { Activity, Archive, Boxes, ChevronsUpDown, Home, LogOut, Menu, Monitor, Moon, PackageCheck, Receipt, Settings, Sun, Truck, WifiOff, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useActiveBrand } from "@/context/BrandContext";
 import { useTheme, type ThemeChoice } from "@/context/ThemeContext";
@@ -18,6 +18,7 @@ const NAV = [
   { to: "/dispatch", label: "Ready to send", icon: PackageCheck, badge: "ready" as const },
   { to: "/dispatches", label: "Dispatches", icon: Truck },
   { to: "/stock", label: "Local stock", icon: Archive },
+  { to: "/invoices", label: "Shipping invoices", icon: Receipt },
   { to: "/activity", label: "Latest updates", icon: Activity },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

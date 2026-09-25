@@ -48,8 +48,8 @@ function latestNote(events: OrderEvent[] | undefined, status: OrderStatus): stri
 
 /** Brand-acting statuses this brand can move an order through while it's still at the brand. */
 const BRAND_ACTORS: OrderStatus[] = ["new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"];
-/** Targets the brand may set via change_order_status (granted in migration 014). */
-const BRAND_TARGETS: OrderStatus[] = ["confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing", "cancelled"];
+/** Targets offered in the brand's "Update status" dropdown (a subset of those granted in migration 014). */
+const BRAND_TARGETS: OrderStatus[] = ["customer_unreachable", "needs_amendment", "brand_preparing", "cancelled"];
 
 /** Statuses this brand may move an order to right now, in order. Empty = no moves. */
 const STATUS_MOVES: Record<OrderStatus, { to: OrderStatus; label: string }[]> = Object.fromEntries(
@@ -217,18 +217,25 @@ export function OrderDetail() {
                 <tbody className="table-body">
                   {o.order_items.map((i) => {
                     const short = atOrAfterHub && i.received_quantity < i.quantity;
-                    const local = i.fulfillment_source === "bangladesh";
+                    const fromInventory = i.fulfillment_source === "bangladesh" ? i.quantity : Math.min(i.inventory_qty ?? 0, i.quantity);
+                    const fromPakistan = i.quantity - fromInventory;
+                    const inventoryTag = (
+                      <span className="inline-flex items-center gap-1.5" title="Fulfilled from local inventory">
+                        <span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden /> Inventory
+                      </span>
+                    );
                     return (
                       <tr key={i.id}>
                         <td><div className="font-medium">{i.product_name}</div>{i.variant && <div className="text-[12.5px] text-muted">{i.variant}</div>}</td>
                         <td className="text-muted">{i.sku ?? "—"}</td>
                         {o.inbound_batch_id && (
                           <td className="whitespace-nowrap text-muted">
-                            {local ? (
-                              <span className="inline-flex items-center gap-1.5" title="Fulfilled from local inventory">
-                                <span className="h-2 w-2 rounded-full bg-orange-500" aria-hidden /> Inventory
-                              </span>
-                            ) : "Pakistan"}
+                            {fromInventory === 0 ? "Pakistan" : fromPakistan === 0 ? inventoryTag : (
+                              <div className="space-y-0.5">
+                                <div>{fromPakistan} × Pakistan</div>
+                                <div className="inline-flex items-center gap-1.5">{fromInventory} ×&nbsp;{inventoryTag}</div>
+                              </div>
+                            )}
                           </td>
                         )}
                         <td className="text-right">{i.quantity}</td>
