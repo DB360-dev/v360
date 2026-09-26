@@ -352,9 +352,37 @@ export function useMarkPreparing(brandId: string, opts?: ActionOptions) {
   return useBrandAction(
     brandId,
     (ids: string[]) => rpc<number>("brand_mark_preparing", { p_order_ids: ids }),
-    (n) => (n === 0 ? "Already marked as preparing" : `${plural(n, "order")} marked as preparing`),
+    (n) => (n === 0 ? "Already marked ready to ship" : `${plural(n, "order")} marked ready to ship`),
     opts,
   );
+}
+
+/**
+ * Moves several orders at once. Each order is moved on its own, so one refusal doesn't stop the rest;
+ * the toast says how many moved and how many didn't.
+ */
+export function useBulkStatusChange(brandId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (v: { ids: string[]; to: OrderStatus; note?: string | null }) => {
+      if (v.to === "brand_preparing") {
+        const n = await rpc<number>("brand_mark_preparing", { p_order_ids: v.ids });
+        return { ok: n, failed: [] as string[] };
+      }
+      const results = await Promise.allSettled(v.ids.map((id) =>
+        v.to === "brand_confirmed"
+          ? rpc<void>("brand_confirm_order", { p_order_id: id })
+          : rpc<null>("change_order_status", { p_order_id: id, p_to: v.to, p_note: v.note?.trim() || null })));
+      const failed = results.flatMap((r) => (r.status === "rejected" ? [describeError(r.reason)] : []));
+      return { ok: results.length - failed.length, failed };
+    },
+    onSuccess: ({ ok, failed }) => {
+      if (ok > 0) toast.success(`${plural(ok, "order")} updated`);
+      if (failed.length > 0) toast.error(`${plural(failed.length, "order")} couldn't be updated: ${[...new Set(failed)].join("; ")}`);
+    },
+    onError: (e) => toast.error(describeError(e)),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.all(brandId) }),
+  });
 }
 
 export function useBrandConfirmOrder(brandId: string, orderId: string, opts?: ActionOptions) {

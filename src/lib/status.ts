@@ -9,9 +9,9 @@ export const STATUS: Record<OrderStatus, { label: string; group: StatusGroup; hi
   confirmation_pending:   { label: "Confirmation pending", group: "confirming", hint: "Our team is confirming this order with the customer." },
   customer_unreachable:   { label: "Customer unreachable", group: "confirming", hint: "We couldn't reach the customer yet and will try again." },
   needs_amendment:        { label: "Needs amendment", group: "brand", hint: "The customer asked for a change. Update the order details so we can reconfirm." },
-  confirmed:              { label: "Fulfilment confirmed", group: "brand", hint: "The customer confirmed with the delivery partner. Prepare the items and dispatch them to the hub." },
+  confirmed:              { label: "Fulfilment confirmed", group: "brand", hint: "The customer confirmed with the delivery partner. Prepare the items and mark the order ready to ship." },
   cancelled:              { label: "Cancelled", group: "closed", hint: "This order was cancelled." },
-  brand_preparing:        { label: "Preparing", group: "brand", hint: "You're preparing this order. Dispatch it to the hub when it's packed." },
+  brand_preparing:        { label: "Ready to ship", group: "brand", hint: "Packed and ready to ship. Dispatch it to the hub." },
   dispatched_to_hub:      { label: "Dispatched to hub", group: "hub", hint: "On its way to the hub. Every item is checked on arrival." },
   received_at_hub:        { label: "Received at hub", group: "hub", hint: "The hub has received this order." },
   hub_issue:              { label: "Hub issue", group: "problem", hint: "Some items didn't arrive at the hub. Send the missing items." },
@@ -45,16 +45,26 @@ export const GROUP_CLASSES: Record<StatusGroup, { text: string; bg: string; dot:
   closed:     { text: "text-g-closed",  bg: "bg-g-closed-bg",  dot: "bg-g-closed" },
 };
 
-/** Tabs on the Orders page, in order. "Needs your action" comes first. */
-export const ORDER_TABS: { key: string; label: string; statuses: OrderStatus[] | null }[] = [
-  { key: "action", label: "Needs your action", statuses: ["new", "needs_amendment", "confirmed", "brand_preparing", "hub_issue"] },
-  { key: "confirming", label: "Confirming", statuses: ["brand_confirmed", "confirmation_pending", "customer_unreachable"] },
-  { key: "hub", label: "At hub", statuses: ["dispatched_to_hub", "received_at_hub", "ready_for_shipment", "assigned_to_shipment"] },
-  { key: "transit", label: "On the way", statuses: ["shipped", "in_transit", "customs", "arrived_bd", "received_by_partner", "preparing_for_delivery", "out_for_delivery"] },
+/** Tabs on the Orders page, in order. "All" comes first; each status belongs to exactly one other tab. */
+const TABS_BEFORE_OTHERS: { key: string; label: string; statuses: OrderStatus[] }[] = [
+  { key: "new", label: "New", statuses: ["new"] },
+  { key: "brand-confirmed", label: "Confirmed by Brand", statuses: ["brand_confirmed", "confirmation_pending", "customer_unreachable"] },
+  { key: "fp-confirmed", label: "Confirmed by FP", statuses: ["confirmed"] },
+  { key: "ready", label: "Ready to dispatch", statuses: ["brand_preparing"] },
+  { key: "received", label: "Received by FP", statuses: ["arrived_bd", "received_by_partner", "preparing_for_delivery"] },
+  { key: "out", label: "Out for Delivery", statuses: ["out_for_delivery"] },
   { key: "delivered", label: "Delivered", statuses: ["delivered"] },
-  { key: "attention", label: "Needs attention", statuses: ["delivery_failed", "returned", "hold"] },
-  { key: "cancelled", label: "Cancelled", statuses: ["cancelled"] },
+  { key: "returned", label: "Returned", statuses: ["returned"] },
+  { key: "attention", label: "Need Attention", statuses: ["hold", "cancelled"] },
+];
+
+export const ORDER_TABS: { key: string; label: string; statuses: OrderStatus[] | null }[] = [
   { key: "all", label: "All", statuses: null },
+  ...TABS_BEFORE_OTHERS,
+  {
+    key: "others", label: "Others",
+    statuses: (Object.keys(STATUS) as OrderStatus[]).filter((s) => !TABS_BEFORE_OTHERS.some((t) => t.statuses.includes(s))),
+  },
 ];
 
 /** The journey rail: six legs every order travels. */
@@ -99,7 +109,7 @@ const BRAND_COLUMN: Record<OrderStatus, ColumnStatus> = {
   needs_amendment:        { label: "Amendment", group: "brand" },
   confirmed:              { label: "Confirmed", group: "brand" },
   cancelled:              { label: "Cancelled", group: "closed" },
-  brand_preparing:        { label: "Confirmed", group: "brand" },
+  brand_preparing:        { label: "Ready to ship", group: "brand" },
   dispatched_to_hub:      { label: "Shipped to hub", group: "hub" },
   received_at_hub:        { label: "Shipped to hub", group: "hub" },
   hub_issue:              { label: "Hub issue", group: "problem" },
@@ -189,7 +199,48 @@ export function masterStatus(status: OrderStatus): ColumnStatus {
 /** Brand-side rules, mirroring the database (the database is still the authority). */
 export const BRAND_EDITABLE: OrderStatus[] = ["new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"];
 export const BRAND_CANCELLABLE: OrderStatus[] = BRAND_EDITABLE;
-export const BRAND_DISPATCHABLE: OrderStatus[] = ["confirmed", "brand_preparing"];
+/** Orders are marked ready to ship (brand_preparing) before they can be dispatched to the hub. */
+export const BRAND_READY_MARKABLE: OrderStatus[] = ["confirmed"];
+export const BRAND_DISPATCHABLE: OrderStatus[] = ["brand_preparing"];
+
+/** Statuses where the order is still with the brand, so the brand can move it. */
+const BRAND_ACTORS: OrderStatus[] = ["new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"];
+
+/**
+ * Options in the brand's "Update status" dropdown (transitions granted in migrations 014 and 032).
+ * "Confirmed" from New goes through the brand confirm flow (brand_confirmed); otherwise it's `confirmed`.
+ */
+export function brandStatusMoves(status: OrderStatus): { to: OrderStatus; label: string }[] {
+  if (!BRAND_ACTORS.includes(status)) return [];
+  const options: { to: OrderStatus; label: string }[] = [
+    { to: "new", label: "New" },
+    { to: status === "new" ? "brand_confirmed" : "confirmed", label: "Confirmed" },
+    { to: "cancelled", label: "Cancelled" },
+    { to: "confirmation_pending", label: "Pending" },
+  ];
+  return options.filter((m) => m.to !== status);
+}
+
+export type BulkActionKey = "new" | "brand_confirmed" | "confirmed" | "confirmation_pending" | "cancelled" | "ready" | "dispatch";
+export interface BulkAction { key: BulkActionKey; label: string }
+
+/** What the Orders page "Bulk action" menu offers for one order, based on its stage. */
+export function bulkActionsFor(status: OrderStatus): BulkAction[] {
+  const actions: BulkAction[] = [];
+  if (BRAND_READY_MARKABLE.includes(status)) actions.push({ key: "ready", label: "Mark ready to ship" });
+  if (BRAND_DISPATCHABLE.includes(status)) actions.push({ key: "dispatch", label: "Dispatch to hub" });
+  for (const m of brandStatusMoves(status)) {
+    actions.push({ key: m.to as BulkActionKey, label: m.to === "cancelled" ? "Cancel" : `Mark as ${m.label.toLowerCase()}` });
+  }
+  return actions;
+}
+
+/** Actions every one of the given orders allows, in a stable order. */
+export function commonBulkActions(statuses: OrderStatus[]): BulkAction[] {
+  if (statuses.length === 0) return [];
+  const [first, ...rest] = statuses.map(bulkActionsFor);
+  return first.filter((a) => rest.every((list) => list.some((b) => b.key === a.key)));
+}
 
 export const SHIPMENT_STATUS_LABEL: Record<ShipmentStatus, string> = {
   draft: "Being packed", ready_for_dispatch: "Ready to leave", handed_to_carrier: "Handed to carrier",

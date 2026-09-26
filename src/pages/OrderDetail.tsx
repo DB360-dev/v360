@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
-import { AlertTriangle, ArrowLeft, ChevronDown, Pencil, Truck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ChevronDown, PackageCheck, Pencil, Truck } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
 import { useBrandConfirmOrder, useChangeOrderStatus, useLatestFxRate, useMarkPreparing, useOrder, useOrderEvents, useOrderInternalNote, useSaveOrderInternalNote } from "@/hooks/useData";
-import { BRAND_DISPATCHABLE, BRAND_EDITABLE, INBOUND_STATUS, SHIPMENT_STATUS_LABEL, STATUS } from "@/lib/status";
+import { BRAND_DISPATCHABLE, BRAND_EDITABLE, BRAND_READY_MARKABLE, INBOUND_STATUS, brandStatusMoves, SHIPMENT_STATUS_LABEL, STATUS } from "@/lib/status";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { neutralize } from "@/lib/neutral";
 import type { OrderDetail as TOrder, OrderEvent, OrderStatus } from "@/lib/types";
@@ -89,32 +89,13 @@ function latestNote(events: OrderEvent[] | undefined, status: OrderStatus): stri
   return note ? neutralize(note) : null;
 }
 
-/** Brand-acting statuses this brand can move an order through while it's still at the brand. */
-const BRAND_ACTORS: OrderStatus[] = ["new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"];
-/** Targets offered in the brand's "Update status" dropdown (a subset of those granted in migration 014). */
-const BRAND_TARGETS: OrderStatus[] = ["customer_unreachable", "needs_amendment", "brand_preparing", "cancelled"];
-
-/** Statuses this brand may move an order to right now, in order. Empty = no moves. */
-const STATUS_MOVES: Record<OrderStatus, { to: OrderStatus; label: string }[]> = Object.fromEntries(
-  Object.keys(STATUS).map((s) => {
-    const status = s as OrderStatus;
-    const moves = BRAND_ACTORS.includes(status)
-      ? [
-          ...(status === "new" ? [{ to: "brand_confirmed" as OrderStatus, label: "Brand confirmed" }] : []),
-          ...BRAND_TARGETS.filter((t) => t !== status).map((t) => ({ to: t, label: STATUS[t].label })),
-        ]
-      : [];
-    return [status, moves];
-  }),
-) as Record<OrderStatus, { to: OrderStatus; label: string }[]>;
-
 function StatusMovesDropdown({ status, onPick, disabled }: {
   status: OrderStatus;
   onPick: (to: OrderStatus) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const moves = STATUS_MOVES[status] ?? [];
+  const moves = brandStatusMoves(status);
   if (moves.length === 0) return null;
   return (
     <div className="relative">
@@ -208,6 +189,7 @@ export function OrderDetail() {
   const s = STATUS[o.status];
   const canEdit = BRAND_EDITABLE.includes(o.status);
   const canDispatch = BRAND_DISPATCHABLE.includes(o.status);
+  const canMarkReady = BRAND_READY_MARKABLE.includes(o.status);
   const atOrAfterHub = !!o.received_at_hub_at || ["hub_issue", "received_at_hub"].includes(o.status);
   const cod = o.cod_currency ?? o.currency;
 
@@ -238,6 +220,7 @@ export function OrderDetail() {
             }}
           />
           {canEdit && <Button onClick={() => setDialog("edit")}><Pencil className="h-4 w-4" /> Edit details</Button>}
+          {canMarkReady && <Button variant="primary" loading={markPreparing.isPending} onClick={() => markPreparing.mutate([o.id])}><PackageCheck className="h-4 w-4" /> Mark ready to ship</Button>}
           {canDispatch && <Button variant="primary" onClick={() => setDialog("dispatch")}><Truck className="h-4 w-4" /> Dispatch to hub</Button>}
         </div>
       </header>

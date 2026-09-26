@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { EmptyState, ErrorState, Spinner } from "@/components/ui/States";
 
-const LEG_TAB: Record<string, string> = { confirm: "confirming", prepare: "action", hub: "hub", shipment: "transit", bd: "transit", delivered: "delivered" };
+const LEG_TAB: Record<string, string> = { confirm: "new", prepare: "fp-confirmed", hub: "others", shipment: "others", bd: "received", delivered: "delivered" };
 
 function Pipeline() {
   const { brand } = useActiveBrand();
@@ -85,7 +85,7 @@ function NeedsAction() {
     <section className="panel">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <h2>Waiting on you</h2>
-        <Link to="/orders?tab=action" className="link text-[13px]">All</Link>
+        <Link to="/orders?tab=new" className="link text-[13px]">All</Link>
       </div>
       {q.isLoading ? <Spinner /> : q.isError ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : q.data!.length === 0 ? (
         <EmptyState icon={<CheckCircle2 className="h-6 w-6 text-g-done" />} title="You're all caught up">

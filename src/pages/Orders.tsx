@@ -2,16 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Inbox, Search, StickyNote, Upload, X } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
-import { PAGE_SIZE, useMarkPreparing, useOrders, useStatusCounts } from "@/hooks/useData";
-import { BRAND_DISPATCHABLE, ORDER_TABS, brandStatus, fulfilmentStatus, masterStatus } from "@/lib/status";
+import { PAGE_SIZE, useOrders, useStatusCounts } from "@/hooks/useData";
+import { BRAND_DISPATCHABLE, ORDER_TABS, STATUS, brandStatus, bulkActionsFor, fulfilmentStatus, masterStatus } from "@/lib/status";
 import { fmtMoney, fmtShort, plural, since } from "@/lib/format";
-import type { OrderOverview } from "@/lib/types";
+import type { OrderOverview, OrderStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState, ErrorState, SkeletonRows } from "@/components/ui/States";
 import { DispatchDialog } from "@/components/DispatchDialog";
+import { BulkActions } from "@/components/BulkActions";
 import { ImportOrdersModal } from "@/components/ImportOrdersModal";
 
 function useDebounced<T>(value: T, ms = 300) {
@@ -27,17 +28,29 @@ function trackingOf(o: OrderOverview): string | null {
   return null;
 }
 
+const ALL_STATUSES = Object.keys(STATUS) as OrderStatus[];
+
+/** The status columns that can be filtered, keyed by URL param. */
+const STATUS_FILTERS = [
+  { param: "fs", label: "Fulfilment status", fn: fulfilmentStatus },
+  { param: "bs", label: "Brand status", fn: brandStatus },
+  { param: "ms", label: "Master status", fn: masterStatus },
+].map((f) => ({ ...f, options: [...new Set(ALL_STATUSES.map((s) => f.fn(s).label))] }));
+
 export function Orders() {
   const { brand } = useActiveBrand();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const tabKey = params.get("tab") ?? "action";
+  const tabKey = params.get("tab") ?? "new";
   const tab = ORDER_TABS.find((t) => t.key === tabKey) ?? ORDER_TABS[0];
   const page = Math.max(0, Number(params.get("page") ?? 0) || 0);
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
   const [searchInput, setSearchInput] = useState(params.get("q") ?? "");
   const search = useDebounced(searchInput);
+  const picks = STATUS_FILTERS.filter((f) => params.get(f.param)).map((f) => ({ fn: f.fn, label: params.get(f.param)! }));
+  const statuses = picks.length === 0 ? tab.statuses
+    : ALL_STATUSES.filter((s) => (!tab.statuses || tab.statuses.includes(s)) && picks.every((p) => p.fn(s).label === p.label));
 
   const update = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams(params);
@@ -51,29 +64,29 @@ export function Orders() {
   }, [search]); // eslint-disable-line
 
   const counts = useStatusCounts(brand.id).data;
-  const q = useOrders(brand.id, { statuses: tab.statuses, search, from, to, page });
+  const q = useOrders(brand.id, { statuses, search, from, to, page });
   const rows = q.data?.rows ?? [];
   const total = q.data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Selection (only orders the brand can act on in bulk)
   const [selected, setSelected] = useState<Map<string, OrderOverview>>(new Map());
-  useEffect(() => setSelected(new Map()), [tabKey, search, from, to, page, brand.id]);
-  const selectable = useMemo(() => rows.filter((r) => BRAND_DISPATCHABLE.includes(r.status)), [rows]);
+  useEffect(() => setSelected(new Map()), [tabKey, search, from, to, page, brand.id, params.get("fs"), params.get("bs"), params.get("ms")]);
+  const canSelectStatus = (s: OrderOverview["status"]) => bulkActionsFor(s).length > 0;
+  const selectable = useMemo(() => rows.filter((r) => canSelectStatus(r.status)), [rows]);
   const allSelected = selectable.length > 0 && selectable.every((r) => selected.has(r.id));
   const toggle = (r: OrderOverview) => setSelected((m) => { const n = new Map(m); if (n.has(r.id)) n.delete(r.id); else n.set(r.id, r); return n; });
   const toggleAll = () => setSelected(allSelected ? new Map() : new Map(selectable.map((r) => [r.id, r])));
 
-  const markPreparing = useMarkPreparing(brand.id);
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const selectedList = [...selected.values()];
-  const confirmedSelected = selectedList.filter((r) => r.status === "confirmed");
+  const readySelected = selectedList.filter((r) => BRAND_DISPATCHABLE.includes(r.status));
 
   const tabCount = (statuses: typeof tab.statuses) =>
     counts ? (statuses ? statuses.reduce((n, s) => n + (counts[s] ?? 0), 0) : Object.values(counts).reduce((a, b) => a + (b ?? 0), 0)) : null;
 
-  const filtersActive = !!(search || from || to);
+  const filtersActive = !!(search || from || to || picks.length);
 
   return (
     <>
@@ -99,7 +112,7 @@ export function Orders() {
             >
               {t.label}
               {n !== null && n > 0 && (
-                <span className={`rounded-full px-1.5 text-[12px] ${t.key === "action" ? "bg-g-brand-bg font-semibold text-g-brand" : "bg-sunken text-muted"}`}>{n}</span>
+                <span className={`rounded-full px-1.5 text-[12px] ${t.key === "new" ? "bg-g-brand-bg font-semibold text-g-brand" : t.key === "attention" ? "bg-g-problem-bg font-semibold text-g-problem" : "bg-sunken text-muted"}`}>{n}</span>
               )}
             </button>
           );
@@ -112,6 +125,14 @@ export function Orders() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" aria-hidden />
           <input className="input pl-9" placeholder="Order number, customer, phone or city" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} />
         </label>
+        {STATUS_FILTERS.map((f) => (
+          <label key={f.param} className="text-[12.5px] text-muted">{f.label}
+            <select className="input mt-1 w-[190px]" value={params.get(f.param) ?? ""} onChange={(e) => update({ [f.param]: e.target.value || null })}>
+              <option value="">All</option>
+              {f.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </label>
+        ))}
         <label className="text-[12.5px] text-muted">From
           <input type="date" className="input mt-1 w-[150px]" value={from} max={to || undefined} onChange={(e) => update({ from: e.target.value || null })} />
         </label>
@@ -119,7 +140,7 @@ export function Orders() {
           <input type="date" className="input mt-1 w-[150px]" value={to} min={from || undefined} onChange={(e) => update({ to: e.target.value || null })} />
         </label>
         {filtersActive && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearchInput(""); update({ q: null, from: null, to: null }); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setSearchInput(""); update({ q: null, from: null, to: null, fs: null, bs: null, ms: null }); }}>
             <X className="h-3.5 w-3.5" /> Clear filters
           </Button>
         )}
@@ -128,13 +149,7 @@ export function Orders() {
       {selected.size > 0 && (
         <div className="sticky top-14 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary-soft px-4 py-2.5 lg:top-2">
           <span className="mr-auto text-[13.5px] font-medium text-primary">{plural(selected.size, "order")} selected</span>
-          {confirmedSelected.length > 0 && (
-            <Button size="sm" loading={markPreparing.isPending}
-              onClick={() => markPreparing.mutate(confirmedSelected.map((r) => r.id), { onSuccess: () => setSelected(new Map()) })}>
-              Mark {confirmedSelected.length} as preparing
-            </Button>
-          )}
-          <Button size="sm" variant="primary" onClick={() => setDispatchOpen(true)}>Dispatch to hub</Button>
+          <BulkActions brandId={brand.id} orders={selectedList} onDispatch={() => setDispatchOpen(true)} onDone={() => setSelected(new Map())} />
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Map())}>Clear</Button>
         </div>
       )}
@@ -145,7 +160,7 @@ export function Orders() {
             <thead className="table-head">
               <tr>
                 <th className="w-10">
-                  <Checkbox aria-label="Select all orders that can be dispatched" checked={allSelected}
+                  <Checkbox aria-label="Select all orders that have a bulk action" checked={allSelected}
                     indeterminate={!allSelected && selected.size > 0} disabled={selectable.length === 0} onChange={toggleAll} />
                 </th>
                 <th>Order</th><th>Date</th><th>Customer</th><th className="text-right">Items</th>
@@ -155,7 +170,7 @@ export function Orders() {
             {q.isLoading ? <SkeletonRows cols={11} /> : (
               <tbody className={`table-body ${q.isFetching && !q.isLoading ? "opacity-70" : ""}`}>
                 {rows.map((o) => {
-                  const canSelect = BRAND_DISPATCHABLE.includes(o.status);
+                  const canSelect = canSelectStatus(o.status);
                   const fulfilment = fulfilmentStatus(o.status);
                   const brand = brandStatus(o.status);
                   const master = masterStatus(o.status);
@@ -163,7 +178,7 @@ export function Orders() {
                     <tr key={o.id} onClick={() => navigate(`/orders/${o.id}`)} className="cursor-pointer hover:bg-sunken/50">
                       <td onClick={(e) => e.stopPropagation()}>
                         <Checkbox aria-label={`Select ${o.order_number}`} checked={selected.has(o.id)} disabled={!canSelect}
-                          title={canSelect ? undefined : "Only confirmed orders can be dispatched"} onChange={() => toggle(o)} />
+                          title={canSelect ? undefined : "No bulk actions for orders at this stage"} onChange={() => toggle(o)} />
                       </td>
                       <td><Link to={`/orders/${o.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">{o.order_number}</Link></td>
                       <td className="whitespace-nowrap text-muted">{fmtShort(o.order_date)}</td>
@@ -193,8 +208,8 @@ export function Orders() {
 
         {q.isError && <ErrorState error={q.error} onRetry={() => q.refetch()} title="Orders didn't load" />}
         {!q.isLoading && !q.isError && rows.length === 0 && (
-          <EmptyState icon={<Inbox className="h-6 w-6" />} title={filtersActive ? "No orders match your filters" : tab.key === "action" ? "Nothing needs your action" : "No orders here"}>
-            {filtersActive ? "Try a different search or date range." : tab.key === "action" ? "New confirmed or imported orders will appear here for you to prepare and dispatch." : "Orders move through these tabs as they progress."}
+          <EmptyState icon={<Inbox className="h-6 w-6" />} title={filtersActive ? "No orders match your filters" : tab.key === "new" ? "No new orders" : "No orders here"}>
+            {filtersActive ? "Try a different search, status or date range." : tab.key === "new" ? "New orders from Shopify or CSV imports will appear here for you to confirm." : "Orders move through these tabs as they progress."}
           </EmptyState>
         )}
 
@@ -209,7 +224,7 @@ export function Orders() {
         )}
       </div>
 
-      <DispatchDialog brandId={brand.id} orders={selectedList} open={dispatchOpen} onClose={() => setDispatchOpen(false)} onDone={() => setSelected(new Map())} />
+      <DispatchDialog brandId={brand.id} orders={readySelected} open={dispatchOpen} onClose={() => setDispatchOpen(false)} onDone={() => setSelected(new Map())} />
       <ImportOrdersModal brandId={brand.id} open={importOpen} onClose={() => setImportOpen(false)} />
     </>
   );
