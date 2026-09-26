@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CheckCircle2, RefreshCw, ShoppingBag } from "lucide-react";
+import { AlertCircle, CheckCircle2, Copy, RefreshCw, ShoppingBag } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { describeError } from "@/lib/errors";
 import { fmtDateTime } from "@/lib/format";
@@ -34,6 +34,55 @@ const CONN: Record<string, { label: string; group: StatusGroup }> = {
   uninstalled: { label: "Disconnected", group: "problem" },
 };
 
+const APP_SCOPES = [
+  "write_assigned_fulfillment_orders", "read_customers", "read_merchant_managed_fulfillment_orders",
+  "write_merchant_managed_fulfillment_orders", "write_order_edits", "read_order_edits", "read_orders",
+  "write_orders", "read_products", "write_third_party_fulfillment_orders",
+];
+
+/** Shopify sends the brand back here after installing their app. */
+const INSTALL_REDIRECT_URL = `${import.meta.env.VITE_SUPABASE_URL ?? ""}/functions/v1/shopify-callback`;
+
+function CopyLine({ value, what }: { value: string; what: string }) {
+  const copy = () => {
+    navigator.clipboard.writeText(value).then(
+      () => toast.success(`${what} copied`),
+      () => toast.error(`Couldn't copy. Select the ${what.toLowerCase()} and copy it manually.`),
+    );
+  };
+  return (
+    <div className="mt-1.5 flex items-start gap-2">
+      <code className="block min-w-0 flex-1 select-all break-all rounded border border-line bg-surface px-2 py-1.5 font-mono text-[12.5px] text-ink">
+        {value}
+      </code>
+      <Button type="button" onClick={copy}><Copy className="h-4 w-4" /> Copy</Button>
+    </div>
+  );
+}
+
+function KeysGuide() {
+  return (
+    <details className="rounded border border-line bg-sunken/40 px-3 py-2.5 text-[13.5px]">
+      <summary className="cursor-pointer font-medium">How to get your app keys</summary>
+      <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-muted">
+        <li>In your Shopify admin, go to <span className="text-ink">Settings → Apps and sales channels → Develop apps</span> and create an app. Any name works.</li>
+        <li>
+          In the app's configuration, add these access scopes:
+          <CopyLine value={APP_SCOPES.join(",")} what="Scopes" />
+          <p className="mt-1.5">Also turn on <span className="font-mono text-ink">use_legacy_install_flow</span>.</p>
+        </li>
+        <li>
+          Set both the <span className="text-ink">App URL</span> and the <span className="text-ink">redirect URL</span> to:
+          <CopyLine value={INSTALL_REDIRECT_URL} what="URL" />
+        </li>
+        <li>Under protected customer data, allow access to <span className="text-ink">name, email, phone and address</span>. We need these to deliver the orders.</li>
+        <li>Release the version.</li>
+        <li>Open the app's settings, copy the <span className="text-ink">Client ID</span> and <span className="text-ink">Secret</span>, and paste them below. When you press Connect store, Shopify asks you to install the app. You don't need to install it yourself.</li>
+      </ol>
+    </details>
+  );
+}
+
 function ShopifyCard() {
   const { brand, isOwner } = useActiveBrand();
   const q = useShopifyConnection(brand.id);
@@ -41,23 +90,31 @@ function ShopifyCard() {
   const disconnect = useDisconnectShopify(brand.id);
   const sync = useSyncShopify(brand.id);
   const [shop, setShop] = useState("");
-  const [err, setErr] = useState<string | null>(null);
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [errs, setErrs] = useState<{ shop?: string; id?: string; secret?: string }>({});
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const s = shop.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "") || q.data?.shop_domain || "";
-    if (!s) { setErr("Enter your store address"); return; }
-    if (!/^[a-z0-9][a-z0-9-]*(\.myshopify\.com)?$/.test(s)) { setErr("Use your myshopify address, e.g. yourbrand.myshopify.com. Not your custom domain."); return; }
-    setErr(null);
-    connect.mutate(s);
-  };
 
   const c = q.data;
   const active = c?.status === "active";
 
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const s = shop.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "") || c?.shop_domain || "";
+    const er: typeof errs = {};
+    if (!s) er.shop = "Enter your store address";
+    else if (!/^[a-z0-9][a-z0-9-]*(\.myshopify\.com)?$/.test(s)) er.shop = "Use your myshopify address, e.g. yourbrand.myshopify.com. Not your custom domain.";
+    if (!clientId.trim()) er.id = "Paste the Client ID from your Shopify app";
+    if (!clientSecret.trim()) er.secret = "Paste the secret from your Shopify app";
+    setErrs(er);
+    if (Object.keys(er).length) return;
+    connect.mutate({ shop: s, clientId, clientSecret }, {
+      onSuccess: () => { setShop(""); setClientId(""); setClientSecret(""); },
+    });
+  };
+
   return (
-    <Card title="Shopify store" description="Connect the store, disconnect it, or sync the latest order updates.">
+    <Card title="Shopify store" description="Connect your store with your own Shopify app so new orders come in automatically.">
       {q.isLoading ? <Spinner /> : q.isError ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : (
         <div className="space-y-4">
           {c && (
@@ -76,18 +133,29 @@ function ShopifyCard() {
           {!isOwner ? (
             <p className="text-[13.5px] text-muted">Only the brand owner can connect, disconnect, or sync the Shopify store.</p>
           ) : (
-            <form onSubmit={submit} noValidate className="space-y-3">
+            <form onSubmit={submit} noValidate className="max-w-lg space-y-3">
+              <KeysGuide />
+              {connect.error && (
+                <div role="alert" className="flex gap-2 rounded border border-danger/30 bg-danger-soft px-3 py-2.5 text-[13.5px] text-danger">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />{describeError(connect.error)}
+                </div>
+              )}
               <TextField
                 label="Store address"
-                placeholder="yourbrand.myshopify.com"
+                placeholder={c?.shop_domain ?? "yourbrand.myshopify.com"}
                 value={shop}
                 onChange={(e) => setShop(e.target.value)}
-                error={err}
-                hint={active ? "Leave blank to reconnect this store, or enter another myshopify address to switch." : "Find it in Shopify admin under Settings, then Domains."}
+                error={errs.shop}
+                hint={c ? "Leave blank to keep this store, or enter another myshopify address to switch." : "Find it in Shopify admin under Settings, then Domains."}
               />
+              <TextField label="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} error={errs.id}
+                autoComplete="off" spellCheck={false} className="input font-mono" />
+              <TextField label="Secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} error={errs.secret}
+                autoComplete="new-password" spellCheck={false} className="input font-mono"
+                hint={active ? "Paste the keys again to update them. They're stored encrypted and never shown again." : "Stored encrypted and never shown again."} />
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" variant={active ? "secondary" : "primary"} loading={connect.isPending}>
-                  Connect
+                  {active ? "Update keys" : "Connect store"}
                 </Button>
                 <Button
                   type="button"
@@ -134,7 +202,7 @@ function ShopifyCard() {
           </>
         }
       >
-        <p className="text-[13.5px] text-muted">You can connect the same store later with the Connect button.</p>
+        <p className="text-[13.5px] text-muted">Your app keys are deleted. To connect again, paste the Client ID and secret again.</p>
       </Dialog>
     </Card>
   );

@@ -427,16 +427,28 @@ export function useUpdateBatch(brandId: string, opts?: ActionOptions) {
   );
 }
 
+export interface ShopifyKeysInput { shop: string; clientId: string; clientSecret: string }
+
+/**
+ * Connects the brand's own Shopify app. If the app isn't installed yet, the server returns
+ * Shopify's install screen and we go there; Shopify then brings the brand back to Settings.
+ * Errors are shown inline by the form, not toasted.
+ */
 export function useConnectShopify(brandId: string) {
+  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (shop: string) => {
-      const { data, error } = await supabase.functions.invoke("shopify-install", { body: { brand_id: brandId, shop } });
+    mutationFn: async (v: ShopifyKeysInput) => {
+      const { data, error } = await supabase.functions.invoke("shopify-connect", {
+        body: { brand_id: brandId, shop: v.shop, client_id: v.clientId.trim(), client_secret: v.clientSecret.trim() },
+      });
       if (error) throw new Error(await describeFunctionError(error));
-      if (!data?.url) throw new Error("Shopify did not return a connection link. Please try again.");
-      return data.url as string;
+      return (data ?? {}) as { install_url?: string };
     },
-    onSuccess: (url) => { window.location.assign(url); },
-    onError: (e) => { toast.error(describeError(e)); },
+    onSuccess: (r) => {
+      if (r.install_url) window.location.assign(r.install_url);
+      else toast.success("Shopify connected. New orders will appear automatically.");
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.all(brandId) }),
   });
 }
 
