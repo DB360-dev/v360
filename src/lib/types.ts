@@ -77,7 +77,12 @@ export interface OrderOverview {
   cod_currency: string | null; confirmation_attempts: number; inbound_courier: string | null; inbound_tracking: string | null;
   shipment_code: string | null; shipment_tracking: string | null; shipping_partner: string | null;
   delivery_courier: string | null; delivery_tracking_number: string | null; delivered_at: string | null; item_count: number;
-  brand_confirmed_at: string | null;
+  brand_confirmed_at: string | null; has_note?: boolean;
+}
+
+/** The brand's private note on an order (order_internal_notes, role = 'brand'). Never shown to our team. */
+export interface OrderInternalNote {
+  order_id: string; role: "brand"; note: string; updated_at: string; updated_by: string | null;
 }
 
 export interface ShopifyConnection {

@@ -69,7 +69,6 @@ function KeysGuide() {
         <li>
           In the app's configuration, add these access scopes:
           <CopyLine value={APP_SCOPES.join(",")} what="Scopes" />
-          <p className="mt-1.5">Also turn on <span className="font-mono text-ink">use_legacy_install_flow</span>.</p>
         </li>
         <li>
           Set both the <span className="text-ink">App URL</span> and the <span className="text-ink">redirect URL</span> to:

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Inbox, Search, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Inbox, Search, StickyNote, Upload, X } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
 import { PAGE_SIZE, useMarkPreparing, useOrders, useStatusCounts } from "@/hooks/useData";
 import { BRAND_DISPATCHABLE, ORDER_TABS, brandStatus, fulfilmentStatus, masterStatus } from "@/lib/status";
@@ -149,10 +149,10 @@ export function Orders() {
                     indeterminate={!allSelected && selected.size > 0} disabled={selectable.length === 0} onChange={toggleAll} />
                 </th>
                 <th>Order</th><th>Date</th><th>Customer</th><th className="text-right">Items</th>
-                <th className="text-right">COD</th><th>Fulfilment status</th><th>Brand status</th><th>Master status</th><th>Tracking</th>
+                <th className="text-right">COD</th><th>Fulfilment status</th><th>Brand status</th><th>Master status</th><th>Notes</th><th>Tracking</th>
               </tr>
             </thead>
-            {q.isLoading ? <SkeletonRows cols={10} /> : (
+            {q.isLoading ? <SkeletonRows cols={11} /> : (
               <tbody className={`table-body ${q.isFetching && !q.isLoading ? "opacity-70" : ""}`}>
                 {rows.map((o) => {
                   const canSelect = BRAND_DISPATCHABLE.includes(o.status);
@@ -181,6 +181,7 @@ export function Orders() {
                           <span className="text-[12px] text-faint" title="Time in this status">{since(o.status_changed_at)}</span>
                         </div>
                       </td>
+                      <td>{o.has_note ? <span title="Has notes"><StickyNote className="h-4 w-4 text-muted" aria-label="Has notes" /></span> : null}</td>
                       <td className="max-w-[180px] truncate text-muted">{trackingOf(o) ?? "—"}</td>
                     </tr>
                   );

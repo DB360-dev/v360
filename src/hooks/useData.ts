@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { describeError, describeFunctionError } from "@/lib/errors";
 import type {
   FxRate, InboundBatchOverview, InventoryItem, Order, OrderDetail, OrderEvent, OrderItem,
-  OrderMessage, OrderOverview, OrderStatus, ShippingInvoice, ShippingInvoiceLine, ShopifyConnection,
+  OrderInternalNote, OrderMessage, OrderOverview, OrderStatus, ShippingInvoice, ShippingInvoiceLine, ShopifyConnection,
 } from "@/lib/types";
 import { plural } from "@/lib/format";
 
@@ -28,6 +28,7 @@ export const keys = {
   dispatchItems: (brandId: string, ids: string) => ["brand", brandId, "dispatchItems", ids] as const,
   shopify: (brandId: string) => ["brand", brandId, "shopify"] as const,
   messages: (brandId: string, orderId: string) => ["brand", brandId, "messages", orderId] as const,
+  internalNote: (brandId: string, orderId: string) => ["brand", brandId, "internalNote", orderId] as const,
   shippingInvoices: (brandId: string) => ["brand", brandId, "shippingInvoices"] as const,
   shippingInvoiceLines: (brandId: string, id: string) => ["brand", brandId, "shippingInvoiceLines", id] as const,
 };
@@ -554,8 +555,48 @@ export function useSendMessage(brandId: string, orderId: string) {
       const { error } = await supabase.rpc("send_order_message", { p_order_id: orderId, p_body: body });
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.messages(brandId, orderId) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: keys.messages(brandId, orderId) });
+      qc.invalidateQueries({ queryKey: ["brand", brandId, "orders"] });
+    },
     onError: (e) => toast.error(describeError(e)),
+  });
+}
+
+export function useOrderInternalNote(brandId: string, orderId: string) {
+  return useQuery({
+    queryKey: keys.internalNote(brandId, orderId),
+    enabled: !!orderId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("order_internal_notes")
+        .select("order_id, role, note, updated_at, updated_by")
+        .eq("order_id", orderId)
+        .eq("role", "brand")
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as OrderInternalNote | null;
+    },
+  });
+}
+
+export function useSaveOrderInternalNote(brandId: string, orderId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (note: string) => {
+      const { data: user } = await supabase.auth.getUser();
+      const { error } = await supabase.from("order_internal_notes").upsert({
+        order_id: orderId, role: "brand", note,
+        updated_at: new Date().toISOString(), updated_by: user.user?.id ?? null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Note saved");
+      qc.invalidateQueries({ queryKey: ["brand", brandId, "orders"] });
+    },
+    onError: (e) => toast.error(describeError(e)),
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.internalNote(brandId, orderId) }),
   });
 }
 

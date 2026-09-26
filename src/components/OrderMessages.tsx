@@ -63,7 +63,7 @@ export function OrderMessages({ orderId }: Props) {
     }
   };
 
-  if (q.isLoading) return <Spinner label="Loading messages" />;
+  if (q.isLoading) return <Spinner label="Loading notes" />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
 
   const messages = q.data ?? [];
@@ -74,7 +74,7 @@ export function OrderMessages({ orderId }: Props) {
       <div className="flex max-h-[420px] min-h-[200px] flex-col gap-3 overflow-y-auto rounded-lg border border-line bg-surface p-4">
         {messages.length === 0 ? (
           <p className="m-auto text-[13.5px] text-muted">
-            No messages yet. Send a message to our team about this order.
+            No notes yet. Send a note to our team about this order.
           </p>
         ) : (
           messages.map((msg) => (
@@ -88,7 +88,7 @@ export function OrderMessages({ orderId }: Props) {
       <div className="flex items-end gap-2">
         <textarea
           className="input min-h-[68px] flex-1 resize-none text-[13.5px]"
-          placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+          placeholder="Type a note… (Enter to send, Shift+Enter for new line)"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -99,13 +99,13 @@ export function OrderMessages({ orderId }: Props) {
           onClick={submit}
           disabled={!text.trim() || send.isPending}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-fg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-          aria-label="Send message"
+          aria-label="Send note"
         >
           <Send className="h-4 w-4" />
         </button>
       </div>
       <p className="text-[12px] text-faint">
-        Messages are visible to our operations team only.
+        Notes are visible to our operations team only.
       </p>
     </div>
   );

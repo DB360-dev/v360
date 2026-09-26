@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, ChevronDown, Pencil, Truck } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
-import { useBrandConfirmOrder, useChangeOrderStatus, useLatestFxRate, useMarkPreparing, useOrder, useOrderEvents } from "@/hooks/useData";
+import { useBrandConfirmOrder, useChangeOrderStatus, useLatestFxRate, useMarkPreparing, useOrder, useOrderEvents, useOrderInternalNote, useSaveOrderInternalNote } from "@/hooks/useData";
 import { BRAND_DISPATCHABLE, BRAND_EDITABLE, INBOUND_STATUS, SHIPMENT_STATUS_LABEL, STATUS } from "@/lib/status";
 import { fmtDate, fmtDateTime, fmtMoney } from "@/lib/format";
 import { neutralize } from "@/lib/neutral";
@@ -25,6 +25,49 @@ function Section({ title, children, aside }: { title: string; children: ReactNod
       </div>
       <div className="p-4">{children}</div>
     </section>
+  );
+}
+
+/** The brand's private note on an order. Only the brand's own team can see it. */
+function InternalNotes({ brandId, orderId }: { brandId: string; orderId: string }) {
+  const q = useOrderInternalNote(brandId, orderId);
+  const save = useSaveOrderInternalNote(brandId, orderId);
+  const [text, setText] = useState("");
+  const loaded = useRef(false);
+
+  useEffect(() => {
+    if (q.data && !loaded.current) {
+      setText(q.data.note ?? "");
+      loaded.current = true;
+    }
+  }, [q.data]);
+
+  const serverNote = q.data?.note ?? "";
+  const dirty = serverNote !== text;
+
+  if (q.isLoading) return <p className="py-2 text-[13.5px] text-faint">Loading note…</p>;
+
+  return (
+    <div className="space-y-2">
+      <textarea
+        className="input min-h-[96px] w-full resize-y text-[13.5px]"
+        rows={4}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Private note for your team only… (not shown to our team)"
+        disabled={save.isPending}
+      />
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[11.5px] text-faint">
+          {q.data?.updated_at ? `Saved ${fmtDateTime(q.data.updated_at)}` : "No note yet"}
+          {dirty ? " · Unsaved changes" : ""}
+          {save.isError ? " · Failed to save" : ""}
+        </span>
+        <Button size="sm" variant="primary" disabled={!dirty} loading={save.isPending} onClick={() => save.mutate(text)}>
+          Save note
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -300,8 +343,18 @@ export function OrderDetail() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <Section title="Messages" aside={undefined}>
+            <Section title="Notes" aside={undefined}>
               <OrderMessages orderId={o.id} />
+            </Section>
+            <Section
+              title="Internal notes"
+              aside={
+                <span className="rounded border border-line bg-sunken px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
+                  Brand only
+                </span>
+              }
+            >
+              <InternalNotes brandId={brand.id} orderId={o.id} />
             </Section>
             <Section title="Fulfilment confirmation">
               <Facts rows={[
