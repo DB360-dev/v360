@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { describeError, describeFunctionError } from "@/lib/errors";
 import type {
   FxRate, InboundBatchOverview, InventoryItem, Order, OrderDetail, OrderEvent, OrderItem,
-  OrderInternalNote, OrderMessage, OrderOverview, OrderStatus, ShippingInvoice, ShippingInvoiceLine, ShopifyConnection,
+  OrderInternalNote, OrderMessage, OrderOverview, PayoutInvoice, OrderStatus, ShippingInvoice, ShippingInvoiceLine, ShopifyConnection,
 } from "@/lib/types";
 import { plural } from "@/lib/format";
 
@@ -30,6 +30,7 @@ export const keys = {
   messages: (brandId: string, orderId: string) => ["brand", brandId, "messages", orderId] as const,
   internalNote: (brandId: string, orderId: string) => ["brand", brandId, "internalNote", orderId] as const,
   shippingInvoices: (brandId: string) => ["brand", brandId, "shippingInvoices"] as const,
+  payoutInvoices: (brandId: string) => ["brand", brandId, "payoutInvoices"] as const,
   shippingInvoiceLines: (brandId: string, id: string) => ["brand", brandId, "shippingInvoiceLines", id] as const,
 };
 
@@ -273,6 +274,22 @@ export function useShippingInvoices(brandId: string) {
         .eq("brand_id", brandId).order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as ShippingInvoice[];
+    },
+  });
+}
+
+/** Payment invoices our team has raised for this brand (settled orders, less commission and returns). */
+export function usePayoutInvoices(brandId: string) {
+  return useQuery({
+    queryKey: keys.payoutInvoices(brandId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("id, invoice_number, brand_id, order_count, total_value, advance_amount, net_remaining, payable_amount, payment_status, created_at, updated_at, lines")
+        .eq("invoice_type", "brand_payout").eq("brand_id", brandId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as PayoutInvoice[];
     },
   });
 }

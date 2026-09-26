@@ -18,7 +18,7 @@ const NAV = [
   { to: "/dispatch", label: "Ready to send", icon: PackageCheck, badge: "ready" as const },
   { to: "/dispatches", label: "Dispatches", icon: Truck },
   { to: "/stock", label: "Local stock", icon: Archive },
-  { to: "/invoices", label: "Shipping invoices", icon: Receipt },
+  { to: "/invoices", label: "Invoices", icon: Receipt },
   { to: "/activity", label: "Latest updates", icon: Activity },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

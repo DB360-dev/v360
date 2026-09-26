@@ -119,6 +119,21 @@ export interface ShippingInvoiceLine {
 }
 
 /** V360's shipping charges to the brand for one shipment — Pakistan-fulfilled units only. */
+/** One order on a payment (brand payout) invoice. */
+export interface PayoutLine {
+  order_id: string; order_number: string; status: OrderStatus; returned_due_to_discrepancy: boolean;
+  value: number; commission: number; returned_deduction: number; payable: number;
+  order_date?: string; customer_name?: string | null; city?: string | null;
+}
+
+/** What we pay the brand for settled orders (invoices.invoice_type = 'brand_payout'). */
+export interface PayoutInvoice {
+  id: string; invoice_number: string; brand_id: string; order_count: number;
+  total_value: number; advance_amount: number; net_remaining: number; payable_amount: number;
+  payment_status: InvoicePaymentStatus; created_at: string; updated_at: string;
+  lines: { v360_commission_pct: number; delivered_value: number; returned_value: number; orders: PayoutLine[] } | null;
+}
+
 export interface ShippingInvoice {
   id: string; invoice_number: string; shipment_id: string; brand_id: string;
   order_count: number; pk_units: number; bd_units: number; weight_kg: number;

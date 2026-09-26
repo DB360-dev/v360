@@ -4,7 +4,6 @@ import { useActiveBrand } from "@/context/BrandContext";
 import { useShippingInvoiceLines, useShippingInvoices } from "@/hooks/useData";
 import { fmtDate, fmtMoney } from "@/lib/format";
 import type { InvoicePaymentStatus, ShippingInvoice } from "@/lib/types";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { EmptyState, ErrorState, SkeletonRows, Spinner } from "@/components/ui/States";
@@ -124,8 +123,9 @@ export function ShippingInvoices() {
 
   return (
     <>
-      <PageHeader title="Shipping invoices"
-        description="V360's charges for shipping your orders from Lahore to Dhaka, by weight. Units fulfilled from your Bangladesh stock are never charged." />
+      <p className="mb-4 text-[13.5px] text-muted">
+        V360's charges for shipping your orders from Lahore to Dhaka, by weight. Units fulfilled from your Bangladesh stock are never charged.
+      </p>
       {q.isLoading ? <div className="panel"><SkeletonRows rows={4} cols={6} /></div>
         : q.isError ? <div className="panel"><ErrorState error={q.error} onRetry={() => q.refetch()} /></div>
         : q.data!.length === 0 ? (

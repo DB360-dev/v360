@@ -15,7 +15,7 @@ import { OrderDetail } from "@/pages/OrderDetail";
 import { Dispatch } from "@/pages/Dispatch";
 import { Dispatches } from "@/pages/Dispatches";
 import { Inventory } from "@/pages/Inventory";
-import { ShippingInvoices } from "@/pages/ShippingInvoices";
+import { Invoices } from "@/pages/Invoices";
 import { Settings } from "@/pages/Settings";
 import { Activity } from "@/pages/Activity";
 import { NotFound } from "@/pages/NotFound";
@@ -57,7 +57,7 @@ export const router = createBrowserRouter([
           { path: "dispatch", element: <Dispatch /> },
           { path: "dispatches", element: <Dispatches /> },
           { path: "stock", element: <Inventory /> },
-          { path: "invoices", element: <ShippingInvoices /> },
+          { path: "invoices", element: <Invoices /> },
           { path: "activity", element: <Activity /> },
           { path: "settings", element: <Settings /> },
           { path: "*", element: <NotFound /> },
