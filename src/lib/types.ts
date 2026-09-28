@@ -16,7 +16,31 @@ export interface Organization {
   id: string; name: string; type: OrgType; slug: string | null; is_active: boolean;
   approval_status: ApprovalStatus; review_note: string | null;
 }
-export interface Membership { role: MemberRole; organization: Organization }
+export interface Membership {
+  role: MemberRole; role_id: string | null; organization: Organization;
+  custom_role: { id: string; name: string; role_permissions: { permission: string }[] } | null;
+}
+
+/** One entry in the permission catalog (table `permissions`). */
+export interface PermissionDef {
+  key: string; area: string; label: string; description: string | null; applies_to: OrgType[]; sort: number;
+}
+
+/** A custom role of this brand, with its permissions and how many people have it. */
+export interface RoleRow {
+  id: string; organization_id: string; org_type: OrgType; name: string; description: string | null;
+  is_preset: boolean; created_at: string; updated_at: string;
+  role_permissions: { permission: string }[];
+  member_count: number;
+}
+
+/** A person with access to this brand (view `team_members`, merged with their membership's role_id). */
+export interface TeamMember {
+  membership_id: string; user_id: string; role: MemberRole; created_at: string;
+  full_name: string | null; email: string | null; phone: string | null;
+  organization_id: string; organization_name: string; organization_type: OrgType;
+  role_id: string | null;
+}
 
 export interface Order {
   id: string; brand_id: string; shopify_order_id: number; order_number: string; order_date: string;

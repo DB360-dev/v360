@@ -94,8 +94,9 @@ function StatusMovesDropdown({ status, onPick, disabled }: {
   onPick: (to: OrderStatus) => void;
   disabled?: boolean;
 }) {
+  const { can } = useActiveBrand();
   const [open, setOpen] = useState(false);
-  const moves = brandStatusMoves(status);
+  const moves = brandStatusMoves(status, can);
   if (moves.length === 0) return null;
   return (
     <div className="relative">
@@ -151,7 +152,7 @@ function Banners({ order, events }: { order: TOrder; events?: OrderEvent[] }) {
 
 export function OrderDetail() {
   const { id = "" } = useParams();
-  const { brand } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
   const q = useOrder(brand.id, id);
   const ev = useOrderEvents(brand.id, id);
   const markPreparing = useMarkPreparing(brand.id);
@@ -187,9 +188,10 @@ export function OrderDetail() {
   }
 
   const s = STATUS[o.status];
-  const canEdit = BRAND_EDITABLE.includes(o.status);
-  const canDispatch = BRAND_DISPATCHABLE.includes(o.status);
-  const canMarkReady = BRAND_READY_MARKABLE.includes(o.status);
+  const canEdit = BRAND_EDITABLE.includes(o.status) && can("orders.edit_customer");
+  const canDispatch = BRAND_DISPATCHABLE.includes(o.status) && can("dispatch.create");
+  const canMarkReady = BRAND_READY_MARKABLE.includes(o.status) && can("orders.prepare");
+  const showMoney = can("orders.view_money");
   const atOrAfterHub = !!o.received_at_hub_at || ["hub_issue", "received_at_hub"].includes(o.status);
   const cod = o.cod_currency ?? o.currency;
 
@@ -239,7 +241,7 @@ export function OrderDetail() {
           <Section title="Items">
             <div className="-m-4 overflow-x-auto">
               <table className="w-full min-w-[520px] text-[13.5px]">
-                <thead className="table-head"><tr><th>Product</th><th>SKU</th>{o.inbound_batch_id && <th>Fulfilled by</th>}<th className="text-right">Qty</th><th className="text-right">Price</th>{atOrAfterHub && <th className="text-right">At hub</th>}</tr></thead>
+                <thead className="table-head"><tr><th>Product</th><th>SKU</th>{o.inbound_batch_id && <th>Fulfilled by</th>}<th className="text-right">Qty</th>{showMoney && <th className="text-right">Price</th>}{atOrAfterHub && <th className="text-right">At hub</th>}</tr></thead>
                 <tbody className="table-body">
                   {o.order_items.map((i) => {
                     const short = atOrAfterHub && i.received_quantity < i.quantity;
@@ -265,7 +267,7 @@ export function OrderDetail() {
                           </td>
                         )}
                         <td className="text-right">{i.quantity}</td>
-                        <td className="whitespace-nowrap text-right">{fmtMoney(i.unit_price, o.currency)}</td>
+                        {showMoney && <td className="whitespace-nowrap text-right">{fmtMoney(i.unit_price, o.currency)}</td>}
                         {atOrAfterHub && (
                           <td className={`text-right font-medium ${short ? "text-g-problem" : "text-g-done"}`}>
                             {i.received_quantity} of {i.quantity}
@@ -289,7 +291,7 @@ export function OrderDetail() {
                 ["Note", o.customer_note],
               ]} />
             </Section>
-            <Section title="Payment">
+            {showMoney && <Section title="Payment">
               <Facts rows={[
                 ["Subtotal",
                   <span key="sub" className="inline-flex flex-wrap items-baseline gap-2">
@@ -322,14 +324,16 @@ export function OrderDetail() {
                   No PKR → BDT rate set yet — converted amounts aren't shown.
                 </p>
               )}
-            </Section>
+            </Section>}
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
-            <Section title="Notes" aside={undefined}>
-              <OrderMessages orderId={o.id} />
-            </Section>
-            <Section
+            {can("orders.messages") && (
+              <Section title="Notes" aside={undefined}>
+                <OrderMessages orderId={o.id} />
+              </Section>
+            )}
+            {can("orders.internal_notes") && <Section
               title="Internal notes"
               aside={
                 <span className="rounded border border-line bg-sunken px-1.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-muted">
@@ -338,7 +342,7 @@ export function OrderDetail() {
               }
             >
               <InternalNotes brandId={brand.id} orderId={o.id} />
-            </Section>
+            </Section>}
             <Section title="Fulfilment confirmation">
               <Facts rows={[
                 ["Status", o.confirmed_at ? "Fulfilment confirmed" : (o.status === "brand_confirmed" ? "Waiting for the delivery partner" : s.label)],
@@ -384,9 +388,9 @@ export function OrderDetail() {
 
         <p className="text-[12.5px] text-faint">Shopify order ID {o.shopify_order_id}. Imported {fmtDateTime(o.created_at)}.</p>
 
-      <EditOrderDialog order={o} open={dialog === "edit"} onClose={() => setDialog(null)} />
-      <CancelOrderDialog order={o} open={dialog === "cancel"} onClose={() => setDialog(null)} />
-      <DispatchDialog brandId={brand.id} orders={[o]} open={dialog === "dispatch"} onClose={() => setDialog(null)} />
+      {canEdit && <EditOrderDialog order={o} open={dialog === "edit"} onClose={() => setDialog(null)} />}
+      {can("orders.cancel") && <CancelOrderDialog order={o} open={dialog === "cancel"} onClose={() => setDialog(null)} />}
+      {canDispatch && <DispatchDialog brandId={brand.id} orders={[o]} open={dialog === "dispatch"} onClose={() => setDialog(null)} />}
       {statusTo && <StatusChangeDialog order={o} to={statusTo} open={!!statusTo} onClose={() => setStatusTo(null)} />}
     </>
   );

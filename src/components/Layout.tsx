@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { Activity, Archive, Boxes, ChevronsUpDown, Home, LogOut, Menu, Monitor, Moon, PackageCheck, Receipt, Settings, Sun, Truck, WifiOff, X } from "lucide-react";
+import { Activity, Archive, Boxes, ChevronsUpDown, FileSpreadsheet, Home, LogOut, Menu, Monitor, Moon, PackageCheck, Receipt, Settings, ShieldCheck, Sun, Truck, Users, WifiOff, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useActiveBrand } from "@/context/BrandContext";
 import { useTheme, type ThemeChoice } from "@/context/ThemeContext";
@@ -11,15 +11,21 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { APP_INITIAL, APP_NAME } from "@/lib/app";
 import { NotificationBanner } from "./NotificationBanner";
 import { NotificationToggle, NotificationPanel } from "./NotificationArea";
+import type { BrandPerm } from "@/lib/permissions";
+import { reportsFor } from "@/reports";
 
-const NAV = [
+/** `perms`: shown when the role grants any of them. `owner`: brand owners only. `reports`: at least one report allowed. Neither: everyone. */
+const NAV: { to: string; label: string; icon: typeof Home; end?: boolean; badge?: "ready"; perms?: BrandPerm[]; owner?: boolean; reports?: boolean }[] = [
   { to: "/", label: "Overview", icon: Home, end: true },
-  { to: "/orders", label: "Orders", icon: Boxes },
-  { to: "/dispatch", label: "Ready to send", icon: PackageCheck, badge: "ready" as const },
-  { to: "/dispatches", label: "Dispatches", icon: Truck },
-  { to: "/stock", label: "Local stock", icon: Archive },
-  { to: "/invoices", label: "Invoices", icon: Receipt },
-  { to: "/activity", label: "Latest updates", icon: Activity },
+  { to: "/orders", label: "Orders", icon: Boxes, perms: ["orders.view"] },
+  { to: "/dispatch", label: "Ready to send", icon: PackageCheck, badge: "ready", perms: ["dispatch.view"] },
+  { to: "/dispatches", label: "Dispatches", icon: Truck, perms: ["dispatch.view"] },
+  { to: "/stock", label: "Local stock", icon: Archive, perms: ["inventory.view"] },
+  { to: "/invoices", label: "Invoices", icon: Receipt, perms: ["invoices.view", "money.view"] },
+  { to: "/reports", label: "Reports", icon: FileSpreadsheet, reports: true },
+  { to: "/activity", label: "Latest updates", icon: Activity, perms: ["activity.view"] },
+  { to: "/team", label: "Team", icon: Users, owner: true },
+  { to: "/roles", label: "Roles", icon: ShieldCheck, owner: true },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -63,7 +69,8 @@ function ThemeSwitch() {
 }
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
-  const { brand } = useActiveBrand();
+  const { brand, can, isOwner, roleName } = useActiveBrand();
+  const nav = NAV.filter((n) => (n.owner ? isOwner : n.reports ? reportsFor(can).length > 0 : !n.perms || n.perms.some(can)));
   const { user, signOut } = useAuth();
   const counts = useStatusCounts(brand.id).data ?? {};
   const ready = (counts.confirmed ?? 0) + (counts.brand_preparing ?? 0);
@@ -78,7 +85,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         <BrandSwitcher />
       </div>
       <nav className="flex-1 space-y-0.5 px-3" aria-label="Main">
-        {NAV.map(({ to, label, icon: Icon, end, badge }) => (
+        {nav.map(({ to, label, icon: Icon, end, badge }) => (
           <NavLink
             key={to} to={to} end={end} onClick={onNavigate}
             className={({ isActive }) =>
@@ -96,7 +103,10 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="space-y-3 border-t border-line p-3">
         <ThemeSwitch />
         <div className="flex items-center gap-2">
-          <div className="min-w-0 flex-1 truncate text-[13px] text-muted" title={user?.email}>{user?.email}</div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[13px] text-muted" title={user?.email}>{user?.email}</div>
+            <div className="truncate text-[11.5px] text-faint">{roleName}</div>
+          </div>
           <button onClick={() => void signOut()} className="rounded p-1.5 text-muted hover:bg-sunken hover:text-ink" title="Sign out">
             <LogOut className="h-4 w-4" /><span className="sr-only">Sign out</span>
           </button>

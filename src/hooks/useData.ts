@@ -1,10 +1,12 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { describeError, describeFunctionError } from "@/lib/errors";
+import { neutralize } from "@/lib/neutral";
 import type {
   FxRate, InboundBatchOverview, InventoryItem, Order, OrderDetail, OrderEvent, OrderItem,
   OrderInternalNote, OrderMessage, OrderOverview, PayoutInvoice, OrderStatus, ShippingInvoice, ShippingInvoiceLine, ShopifyConnection,
+  MemberRole, PermissionDef, RoleRow, TeamMember,
 } from "@/lib/types";
 import { plural } from "@/lib/format";
 
@@ -32,7 +34,12 @@ export const keys = {
   shippingInvoices: (brandId: string) => ["brand", brandId, "shippingInvoices"] as const,
   payoutInvoices: (brandId: string) => ["brand", brandId, "payoutInvoices"] as const,
   shippingInvoiceLines: (brandId: string, id: string) => ["brand", brandId, "shippingInvoiceLines", id] as const,
+  team: (brandId: string) => ["brand", brandId, "team"] as const,
+  roles: (brandId: string) => ["brand", brandId, "roles"] as const,
 };
+
+/** The signed-in user's own memberships (BrandContext). Refetched when roles or access change. */
+const MEMBERSHIPS_KEY = ["memberships"] as const;
 
 // ---------------------------------------------------------------- queries
 
@@ -349,13 +356,18 @@ function useBrandAction<TVars, TResult>(
   fn: (v: TVars) => Promise<TResult>,
   success: (r: TResult, v: TVars) => string,
   opts: ActionOptions = {},
+  /** Other queries to refresh as well (outside this brand's keys). */
+  alsoInvalidate: QueryKey[] = [],
 ) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: (r, v) => { toast.success(success(r, v)); },
     onError: (e) => { if (!opts.inlineErrors) toast.error(describeError(e)); },
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.all(brandId) }),
+    onSettled: () => Promise.all([
+      qc.invalidateQueries({ queryKey: keys.all(brandId) }),
+      ...alsoInvalidate.map((queryKey) => qc.invalidateQueries({ queryKey })),
+    ]),
   });
 }
 
@@ -514,8 +526,9 @@ export interface ShopifySyncResult {
 export function useSyncShopify(brandId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("shopify-sync", { body: { brand_id: brandId } });
+    mutationFn: async (sinceDate?: string) => {
+      const body = sinceDate ? { brand_id: brandId, since_date: sinceDate } : { brand_id: brandId };
+      const { data, error } = await supabase.functions.invoke("shopify-sync", { body });
       if (error) throw new Error(await describeFunctionError(error));
       return data as ShopifySyncResult;
     },
@@ -677,4 +690,133 @@ export function useLatestFxRate(base: string, quote: string) {
       return data as FxRate | null;
     },
   });
+}
+
+// ------------------------------------------------------- team and roles
+
+/** Permissions a brand role can grant, in catalog order. */
+export function usePermissionCatalog() {
+  return useQuery({
+    queryKey: ["permissions", "brand"],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("permissions").select("*").order("sort");
+      if (error) throw error;
+      return ((data ?? []) as PermissionDef[]).filter((p) => (p.applies_to ?? []).includes("brand"));
+    },
+  });
+}
+
+/** This brand's custom roles, with their permissions and how many people have each. */
+export function useBrandRoles(brandId: string) {
+  return useQuery({
+    queryKey: keys.roles(brandId),
+    queryFn: async () => {
+      const [roles, members] = await Promise.all([
+        supabase.from("roles").select("*, role_permissions(permission)").eq("organization_id", brandId).order("name"),
+        supabase.from("memberships").select("role_id").eq("organization_id", brandId),
+      ]);
+      if (roles.error) throw roles.error;
+      if (members.error) throw members.error;
+      const counts = new Map<string, number>();
+      for (const m of (members.data ?? []) as { role_id: string | null }[]) {
+        if (m.role_id) counts.set(m.role_id, (counts.get(m.role_id) ?? 0) + 1);
+      }
+      return ((roles.data ?? []) as Omit<RoleRow, "member_count">[])
+        .map((r) => ({ ...r, member_count: counts.get(r.id) ?? 0 }));
+    },
+  });
+}
+
+export interface RoleInput { id: string | null; name: string; description: string; permissions: string[] }
+
+export function useSaveBrandRole(brandId: string, opts?: ActionOptions) {
+  return useBrandAction(
+    brandId,
+    (v: RoleInput) => rpc<string>("save_org_role", {
+      p_id: v.id, p_org_id: brandId, p_name: v.name.trim(), p_description: v.description.trim() || null, p_permissions: v.permissions,
+    }),
+    (_r, v) => (v.id ? `${v.name.trim()} saved` : `${v.name.trim()} created`),
+    opts,
+    [MEMBERSHIPS_KEY],
+  );
+}
+
+export function useDeleteBrandRole(brandId: string, opts?: ActionOptions) {
+  return useBrandAction(
+    brandId,
+    (id: string) => rpc<null>("delete_role", { p_id: id }),
+    () => "Role deleted",
+    opts,
+    [MEMBERSHIPS_KEY],
+  );
+}
+
+/** Everyone with access to this brand. */
+export function useTeam(brandId: string) {
+  return useQuery({
+    queryKey: keys.team(brandId),
+    queryFn: async () => {
+      const [team, members] = await Promise.all([
+        supabase.from("team_members").select("*").eq("organization_id", brandId).order("created_at"),
+        supabase.from("memberships").select("id, role_id").eq("organization_id", brandId),
+      ]);
+      if (team.error) throw team.error;
+      if (members.error) throw members.error;
+      const roleOf = new Map(((members.data ?? []) as { id: string; role_id: string | null }[]).map((m) => [m.id, m.role_id]));
+      return ((team.data ?? []) as Omit<TeamMember, "role_id">[])
+        .map((m) => ({ ...m, role_id: roleOf.get(m.membership_id) ?? null }));
+    },
+  });
+}
+
+export interface AddStaffInput {
+  email: string; fullName: string; role: Extract<MemberRole, "brand_owner" | "brand_staff">; roleId: string | null; password: string | null;
+}
+
+export function useAddStaff(brandId: string, opts?: ActionOptions) {
+  return useBrandAction(
+    brandId,
+    async (v: AddStaffInput) => {
+      const { data, error } = await supabase.functions.invoke("manage-user", {
+        body: {
+          email: v.email.trim().toLowerCase(), full_name: v.fullName.trim(), organization_id: brandId, role: v.role,
+          ...(v.role === "brand_staff" && v.roleId ? { role_id: v.roleId } : {}),
+          ...(v.password ? { password: v.password } : {}),
+        },
+      });
+      if (error) throw new Error(neutralize(await describeFunctionError(error)));
+      return (data ?? {}) as { message?: string };
+    },
+    (r, v) => neutralize(r.message) || `${v.email.trim()} was added`,
+    opts,
+  );
+}
+
+/** Owner: { role: "brand_owner", roleId: null }. Staff: { role: "brand_staff", roleId }. */
+export function useSetMemberRole(brandId: string, opts?: ActionOptions) {
+  return useBrandAction(
+    brandId,
+    async (v: { membershipId: string; role: "brand_owner" | "brand_staff"; roleId: string | null }) => {
+      const { error } = await supabase.from("memberships")
+        .update({ role: v.role, role_id: v.role === "brand_owner" ? null : v.roleId })
+        .eq("id", v.membershipId).select("id").single();
+      if (error) throw error;
+    },
+    () => "Role updated",
+    opts,
+    [MEMBERSHIPS_KEY],
+  );
+}
+
+export function useRemoveMember(brandId: string, opts?: ActionOptions) {
+  return useBrandAction(
+    brandId,
+    async (v: { membershipId: string; name: string }) => {
+      const { error } = await supabase.from("memberships").delete().eq("id", v.membershipId).select("id").single();
+      if (error) throw error;
+    },
+    (_r, v) => `${v.name} no longer has access`,
+    opts,
+  );
 }

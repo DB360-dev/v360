@@ -1,16 +1,27 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { Membership, MemberRole, Organization } from "@/lib/types";
+import type { BrandPerm } from "@/lib/permissions";
 import { useAuth } from "./AuthContext";
 
 const KEY = "portal-active-brand";
 
+interface BrandEntry {
+  org: Organization; role: MemberRole; roleId: string | null;
+  roleName: string | null; perms: Set<string>;
+}
+
 interface BrandCtx {
-  brands: { org: Organization; role: MemberRole }[];
+  brands: BrandEntry[];
   brand: Organization | null;
   role: MemberRole | null;
+  /** Brand owner: every permission, and manages staff and roles. */
   isOwner: boolean;
+  /** Whether the signed-in user's role in the active brand grants this permission. UI convenience only. */
+  can: (perm: BrandPerm) => boolean;
+  /** "Owner", the custom role's name, or "No role". */
+  roleName: string;
   /** Signed-in user belongs to an internal operations team, not a brand. */
   isOpsUser: boolean;
   /** Brands this user registered that are awaiting approval, or were rejected. */
@@ -36,7 +47,7 @@ export function BrandProvider({ children }: { children: ReactNode }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("memberships")
-        .select("role, organization:organizations(id, name, type, slug, is_active, approval_status, review_note)")
+        .select("role, role_id, organization:organizations(id, name, type, slug, is_active, approval_status, review_note), custom_role:roles(id, name, role_permissions(permission))")
         .eq("user_id", user!.id);
       if (error) throw error;
       return (data ?? []) as unknown as Membership[];
@@ -46,7 +57,10 @@ export function BrandProvider({ children }: { children: ReactNode }) {
   const brands = useMemo(
     () => (q.data ?? [])
       .filter((m) => m.organization?.type === "brand" && m.organization.is_active)
-      .map((m) => ({ org: m.organization, role: m.role }))
+      .map((m): BrandEntry => ({
+        org: m.organization, role: m.role, roleId: m.role_id ?? null, roleName: m.custom_role?.name ?? null,
+        perms: new Set((m.custom_role?.role_permissions ?? []).map((p) => p.permission)),
+      }))
       .sort((a, b) => a.org.name.localeCompare(b.org.name)),
     [q.data],
   );
@@ -66,9 +80,16 @@ export function BrandProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(KEY, id); } catch { /* ignore */ }
   };
 
+  const isOwner = current?.role === "brand_owner";
+  const can = useCallback(
+    (perm: BrandPerm) => !!current && (current.role === "brand_owner" || current.perms.has(perm)),
+    [current],
+  );
+  const roleName = isOwner ? "Owner" : current?.roleName ?? "No role";
+
   return (
     <Ctx.Provider value={{
-      brands, brand: current?.org ?? null, role: current?.role ?? null, isOwner: current?.role === "brand_owner",
+      brands, brand: current?.org ?? null, role: current?.role ?? null, isOwner, can, roleName,
       isOpsUser, pendingBrands, rejectedBrands, setBrandId, loading: q.isLoading, error: q.error, refetch: () => void q.refetch(),
     }}>
       {children}

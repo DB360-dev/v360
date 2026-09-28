@@ -83,7 +83,8 @@ function KeysGuide() {
 }
 
 function ShopifyCard() {
-  const { brand, isOwner } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
+  const canManage = can("shopify.manage");
   const q = useShopifyConnection(brand.id);
   const connect = useConnectShopify(brand.id);
   const disconnect = useDisconnectShopify(brand.id);
@@ -93,6 +94,8 @@ function ShopifyCard() {
   const [clientSecret, setClientSecret] = useState("");
   const [errs, setErrs] = useState<{ shop?: string; id?: string; secret?: string }>({});
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [liveDate, setLiveDate] = useState("");
+  const today = new Date().toLocaleDateString("en-CA");
 
   const c = q.data;
   const active = c?.status === "active";
@@ -129,8 +132,8 @@ function ShopifyCard() {
               <dt className="text-muted">Last order update</dt><dd>{c.last_synced_at ? fmtDateTime(c.last_synced_at) : "None received yet"}</dd>
             </dl>
           )}
-          {!isOwner ? (
-            <p className="text-[13.5px] text-muted">Only the brand owner can connect, disconnect, or sync the Shopify store.</p>
+          {!canManage ? (
+            <p className="text-[13.5px] text-muted">Your role can't connect, disconnect, or sync the Shopify store. Ask your brand owner.</p>
           ) : (
             <form onSubmit={submit} noValidate className="max-w-lg space-y-3">
               <KeysGuide />
@@ -152,6 +155,17 @@ function ShopifyCard() {
               <TextField label="Secret" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} error={errs.secret}
                 autoComplete="new-password" spellCheck={false} className="input font-mono"
                 hint={active ? "Paste the keys again to update them. They're stored encrypted and never shown again." : "Stored encrypted and never shown again."} />
+              {active && (
+                <TextField
+                  label="Go-live date"
+                  optional
+                  type="date"
+                  max={today}
+                  value={liveDate}
+                  onChange={(e) => setLiveDate(e.target.value)}
+                  hint="Pick the date you went live to fetch every order placed on or after it when you press Sync. Leave blank to fetch only recent changes."
+                />
+              )}
               <div className="flex flex-wrap gap-2">
                 <Button type="submit" variant={active ? "secondary" : "primary"} loading={connect.isPending}>
                   {active ? "Update keys" : "Connect store"}
@@ -169,7 +183,7 @@ function ShopifyCard() {
                   variant="primary"
                   disabled={!active}
                   loading={sync.isPending}
-                  onClick={() => sync.mutate()}
+                  onClick={() => sync.mutate(liveDate ? new Date(`${liveDate}T00:00:00`).toISOString() : undefined)}
                 >
                   <RefreshCw className="h-4 w-4" /> Sync
                 </Button>

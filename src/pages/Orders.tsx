@@ -38,7 +38,8 @@ const STATUS_FILTERS = [
 ].map((f) => ({ ...f, options: [...new Set(ALL_STATUSES.map((s) => f.fn(s).label))] }));
 
 export function Orders() {
-  const { brand } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
+  const showMoney = can("orders.view_money");
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tabKey = params.get("tab") ?? "new";
@@ -72,8 +73,8 @@ export function Orders() {
   // Selection (only orders the brand can act on in bulk)
   const [selected, setSelected] = useState<Map<string, OrderOverview>>(new Map());
   useEffect(() => setSelected(new Map()), [tabKey, search, from, to, page, brand.id, params.get("fs"), params.get("bs"), params.get("ms")]);
-  const canSelectStatus = (s: OrderOverview["status"]) => bulkActionsFor(s).length > 0;
-  const selectable = useMemo(() => rows.filter((r) => canSelectStatus(r.status)), [rows]);
+  const canSelectStatus = (s: OrderOverview["status"]) => bulkActionsFor(s, can).length > 0;
+  const selectable = useMemo(() => rows.filter((r) => canSelectStatus(r.status)), [rows, can]); // eslint-disable-line
   const allSelected = selectable.length > 0 && selectable.every((r) => selected.has(r.id));
   const toggle = (r: OrderOverview) => setSelected((m) => { const n = new Map(m); if (n.has(r.id)) n.delete(r.id); else n.set(r.id, r); return n; });
   const toggleAll = () => setSelected(allSelected ? new Map() : new Map(selectable.map((r) => [r.id, r])));
@@ -93,11 +94,11 @@ export function Orders() {
       <PageHeader
         title="Orders"
         description="Orders imported automatically from Shopify or added manually via CSV."
-        actions={
+        actions={can("orders.import") && (
           <Button variant="secondary" onClick={() => setImportOpen(true)}>
             <Upload className="h-4 w-4" /> Import CSV
           </Button>
-        }
+        )}
       />
 
       <div role="tablist" aria-label="Order stages" className="-mx-1 mb-4 flex gap-1 overflow-x-auto border-b border-line px-1">
@@ -164,10 +165,10 @@ export function Orders() {
                     indeterminate={!allSelected && selected.size > 0} disabled={selectable.length === 0} onChange={toggleAll} />
                 </th>
                 <th>Order</th><th>Date</th><th>Customer</th><th className="text-right">Items</th>
-                <th className="text-right">COD</th><th>Fulfilment status</th><th>Brand status</th><th>Master status</th><th>Notes</th><th>Tracking</th>
+                {showMoney && <th className="text-right">COD</th>}<th>Fulfilment status</th><th>Brand status</th><th>Master status</th><th>Notes</th><th>Tracking</th>
               </tr>
             </thead>
-            {q.isLoading ? <SkeletonRows cols={11} /> : (
+            {q.isLoading ? <SkeletonRows cols={showMoney ? 11 : 10} /> : (
               <tbody className={`table-body ${q.isFetching && !q.isLoading ? "opacity-70" : ""}`}>
                 {rows.map((o) => {
                   const canSelect = canSelectStatus(o.status);
@@ -187,7 +188,7 @@ export function Orders() {
                         <div className="text-[12.5px] text-faint">{o.city ?? ""}</div>
                       </td>
                       <td className="text-right">{o.item_count}</td>
-                      <td className="whitespace-nowrap text-right">{fmtMoney(o.cod_amount_expected ?? o.order_total, o.cod_currency ?? o.currency)}</td>
+                      {showMoney && <td className="whitespace-nowrap text-right">{fmtMoney(o.cod_amount_expected ?? o.order_total, o.cod_currency ?? o.currency)}</td>}
                       <td><Pill group={fulfilment.group} label={fulfilment.label} /></td>
                       <td><Pill group={brand.group} label={brand.label} /></td>
                       <td>
@@ -224,8 +225,8 @@ export function Orders() {
         )}
       </div>
 
-      <DispatchDialog brandId={brand.id} orders={readySelected} open={dispatchOpen} onClose={() => setDispatchOpen(false)} onDone={() => setSelected(new Map())} />
-      <ImportOrdersModal brandId={brand.id} open={importOpen} onClose={() => setImportOpen(false)} />
+      {can("dispatch.create") && <DispatchDialog brandId={brand.id} orders={readySelected} open={dispatchOpen} onClose={() => setDispatchOpen(false)} onDone={() => setSelected(new Map())} />}
+      {can("orders.import") && <ImportOrdersModal brandId={brand.id} open={importOpen} onClose={() => setImportOpen(false)} />}
     </>
   );
 }

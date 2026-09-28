@@ -64,7 +64,9 @@ function PrintMenu({ onPick }: { onPick: (mode: PrintMode) => void }) {
 
 /** Packing list of every confirmed order, ready to prepare and send to the hub. */
 export function Dispatch() {
-  const { brand } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
+  const canPrepare = can("orders.prepare");
+  const canDispatch = can("dispatch.create");
   const q = useReadyToSend(brand.id);
   const markPreparing = useMarkPreparing(brand.id);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -117,13 +119,17 @@ export function Dispatch() {
                 ? <span className="font-medium">{plural(selected.size, "order")}, {plural(totalItems(selectedOrders), "item")} selected</span>
                 : <span className="text-muted">{plural(orders.length, "order")}, {plural(totalItems(orders), "item")} to pack</span>}
             </label>
-            <Button size="sm" disabled={confirmedSel.length === 0} loading={markPreparing.isPending}
-              onClick={() => markPreparing.mutate(confirmedSel.map((o) => o.id))}>
-              <PackageCheck className="h-4 w-4" /> Mark ready to ship{confirmedSel.length ? ` (${confirmedSel.length})` : ""}
-            </Button>
-            <Button size="sm" variant="primary" disabled={readySel.length === 0} onClick={() => setDispatchOpen(true)}>
-              <Truck className="h-4 w-4" /> Dispatch to hub{readySel.length ? ` (${readySel.length})` : ""}
-            </Button>
+            {canPrepare && (
+              <Button size="sm" disabled={confirmedSel.length === 0} loading={markPreparing.isPending}
+                onClick={() => markPreparing.mutate(confirmedSel.map((o) => o.id))}>
+                <PackageCheck className="h-4 w-4" /> Mark ready to ship{confirmedSel.length ? ` (${confirmedSel.length})` : ""}
+              </Button>
+            )}
+            {canDispatch && (
+              <Button size="sm" variant="primary" disabled={readySel.length === 0} onClick={() => setDispatchOpen(true)}>
+                <Truck className="h-4 w-4" /> Dispatch to hub{readySel.length ? ` (${readySel.length})` : ""}
+              </Button>
+            )}
           </div>
 
           {printMode === "product" && (
@@ -183,7 +189,7 @@ export function Dispatch() {
         </>
       )}
 
-      <DispatchDialog brandId={brand.id} orders={readySel} open={dispatchOpen} onClose={() => setDispatchOpen(false)} onDone={() => setSelected(new Set())} />
+      {canDispatch && <DispatchDialog brandId={brand.id} orders={readySel} open={dispatchOpen} onClose={() => setDispatchOpen(false)} onDone={() => setSelected(new Set())} />}
     </>
   );
 }

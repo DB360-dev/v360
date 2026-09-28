@@ -1,23 +1,26 @@
 import { useSearchParams } from "react-router-dom";
+import { useActiveBrand } from "@/context/BrandContext";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ShippingInvoices } from "./ShippingInvoices";
 import { Payments } from "./Payments";
 
 const TABS = [
-  { key: "shipping", label: "Shipping invoices" },
-  { key: "payments", label: "Payments" },
+  { key: "shipping", label: "Shipping invoices", perm: "invoices.view" },
+  { key: "payments", label: "Payments", perm: "money.view" },
 ] as const;
 
 /** Invoices: shipping charges we bill the brand, and payments we make to the brand. */
 export function Invoices() {
+  const { can } = useActiveBrand();
   const [params, setParams] = useSearchParams();
-  const tab = TABS.find((t) => t.key === params.get("tab"))?.key ?? "shipping";
+  const tabs = TABS.filter((t) => can(t.perm));
+  const tab = (tabs.find((t) => t.key === params.get("tab")) ?? tabs[0])?.key ?? "shipping";
 
   return (
     <>
       <PageHeader title="Invoices" description="Shipping charges for your orders, and payments to you for delivered orders." />
       <div role="tablist" aria-label="Invoice type" className="-mx-1 mb-4 flex gap-1 overflow-x-auto border-b border-line px-1">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.key} role="tab" aria-selected={t.key === tab}
             onClick={() => setParams(t.key === "shipping" ? {} : { tab: t.key }, { replace: true })}

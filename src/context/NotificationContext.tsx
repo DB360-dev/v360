@@ -35,7 +35,9 @@ const STORAGE_KEY = "v360_read_notifications";
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const { brand } = useBrand();
+  const { brand, can } = useBrand();
+  /** Order notes need the messages permission; without it there's nothing to notify about. */
+  const canMessages = can("orders.messages");
   const [notifications, setNotifications] = useState<OrderNotification[]>([]);
   const [activeBanner, setActiveBanner] = useState<OrderNotification | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -62,6 +64,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const fetchRecentMessages = useCallback(async () => {
     if (!brand?.id || !user) return;
+    if (!canMessages) { setNotifications([]); return; }
 
     try {
       // Fetch recent order_messages for this brand's orders
@@ -111,7 +114,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } catch (e) {
       console.error("Error in fetchRecentMessages:", e);
     }
-  }, [brand?.id, brand?.name, user]);
+  }, [brand?.id, brand?.name, user, canMessages]);
 
   useEffect(() => {
     void fetchRecentMessages();
@@ -119,7 +122,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Realtime subscription for incoming order messages
   useEffect(() => {
-    if (!brand?.id) return;
+    if (!brand?.id || !canMessages) return;
 
     const channel = supabase
       .channel(`brand-notes-${brand.id}`)
@@ -166,7 +169,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [brand?.id, brand?.name]);
+  }, [brand?.id, brand?.name, canMessages]);
 
   const dismissBanner = useCallback(() => {
     setActiveBanner(null);

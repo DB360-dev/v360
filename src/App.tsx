@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Navigate, Outlet, createBrowserRouter, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useBrand } from "@/context/BrandContext";
@@ -19,6 +20,11 @@ import { Invoices } from "@/pages/Invoices";
 import { Settings } from "@/pages/Settings";
 import { Activity } from "@/pages/Activity";
 import { NotFound } from "@/pages/NotFound";
+import { Team } from "@/pages/Team";
+import { Roles } from "@/pages/Roles";
+import { Reports } from "@/pages/Reports";
+import { reportsFor } from "@/reports";
+import type { BrandPerm } from "@/lib/permissions";
 
 /** Signed in? Otherwise to /login (remembering where they were going). */
 function RequireAuth() {
@@ -38,6 +44,22 @@ function RequireBrand() {
   return <Outlet />;
 }
 
+/**
+ * Pages the user's role doesn't allow send them to the overview.
+ * Convenience only: the database decides what they can actually read.
+ */
+function Allow({ perm, anyOf, owner, children }: { perm?: BrandPerm; anyOf?: BrandPerm[]; owner?: boolean; children: ReactNode }) {
+  const { can, isOwner } = useBrand();
+  const ok = owner ? isOwner : perm ? can(perm) : anyOf ? anyOf.some(can) : true;
+  return ok ? <>{children}</> : <Navigate to="/" replace />;
+}
+
+/** Reports page: only when the role can open at least one report. */
+function AllowReports({ children }: { children: ReactNode }) {
+  const { can } = useBrand();
+  return reportsFor(can).length > 0 ? <>{children}</> : <Navigate to="/" replace />;
+}
+
 export const router = createBrowserRouter([
   { path: "/login", element: <Login />, errorElement: <RouteError /> },
   { path: "/register", element: <Register />, errorElement: <RouteError /> },
@@ -52,13 +74,16 @@ export const router = createBrowserRouter([
         element: <Layout />,
         children: [
           { index: true, element: <Overview /> },
-          { path: "orders", element: <Orders /> },
-          { path: "orders/:id", element: <OrderDetail /> },
-          { path: "dispatch", element: <Dispatch /> },
-          { path: "dispatches", element: <Dispatches /> },
-          { path: "stock", element: <Inventory /> },
-          { path: "invoices", element: <Invoices /> },
-          { path: "activity", element: <Activity /> },
+          { path: "orders", element: <Allow perm="orders.view"><Orders /></Allow> },
+          { path: "orders/:id", element: <Allow perm="orders.view"><OrderDetail /></Allow> },
+          { path: "dispatch", element: <Allow perm="dispatch.view"><Dispatch /></Allow> },
+          { path: "dispatches", element: <Allow perm="dispatch.view"><Dispatches /></Allow> },
+          { path: "stock", element: <Allow perm="inventory.view"><Inventory /></Allow> },
+          { path: "invoices", element: <Allow anyOf={["invoices.view", "money.view"]}><Invoices /></Allow> },
+          { path: "reports", element: <AllowReports><Reports /></AllowReports> },
+          { path: "activity", element: <Allow perm="activity.view"><Activity /></Allow> },
+          { path: "team", element: <Allow owner><Team /></Allow> },
+          { path: "roles", element: <Allow owner><Roles /></Allow> },
           { path: "settings", element: <Settings /> },
           { path: "*", element: <NotFound /> },
         ],

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { PlugZap, CheckCircle2, ArrowRight } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
@@ -11,8 +12,14 @@ import { EmptyState, ErrorState, Spinner } from "@/components/ui/States";
 
 const LEG_TAB: Record<string, string> = { confirm: "new", prepare: "fp-confirmed", hub: "others", shipment: "others", bd: "received", delivered: "delivered" };
 
+/** A link when the user may open orders; plain content otherwise. */
+function OrdersLink({ to, className, children }: { to: string; className: string; children: ReactNode }) {
+  const { can } = useActiveBrand();
+  return can("orders.view") ? <Link to={to} className={className}>{children}</Link> : <div className={className.replace(/hover:\S+|focus-visible:\S+/g, "")}>{children}</div>;
+}
+
 function Pipeline() {
-  const { brand } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
   const q = useStatusCounts(brand.id);
   if (q.isError) return <div className="panel"><ErrorState error={q.error} onRetry={() => q.refetch()} /></div>;
   const c = q.data ?? {};
@@ -29,7 +36,7 @@ function Pipeline() {
             {q.isLoading ? "–" : total}
           </div>
         </div>
-        <Link to="/orders?tab=all" className="link text-[13px]">View all</Link>
+        {can("orders.view") && <Link to="/orders?tab=all" className="link text-[13px]">View all</Link>}
       </div>
       <ol className="flex min-w-[640px]">
         {JOURNEY.map((leg, i) => {
@@ -37,29 +44,29 @@ function Pipeline() {
           const isYou = leg.key === "prepare" || (leg.key === "confirm" && sum(["new", "needs_amendment"]) > 0);
           return (
             <li key={leg.key} className={`relative flex-1 ${i > 0 ? "border-l border-line" : ""}`}>
-              <Link to={`/orders?tab=${LEG_TAB[leg.key]}`} className="block px-4 py-4 hover:bg-sunken/60 focus-visible:bg-sunken/60">
+              <OrdersLink to={`/orders?tab=${LEG_TAB[leg.key]}`} className="block px-4 py-4 hover:bg-sunken/60 focus-visible:bg-sunken/60">
                 <div className="text-[12.5px] text-muted">{i + 1}. {leg.label}</div>
                 <div className={`mt-1 text-[28px] font-semibold leading-none tracking-tight ${q.isLoading ? "text-faint" : isYou && n > 0 ? "text-g-brand" : ""}`}>
                   {q.isLoading ? "–" : n}
                 </div>
                 {isYou && n > 0 && <div className="mt-1.5 text-[12px] font-medium text-g-brand">Waiting on you</div>}
-              </Link>
+              </OrdersLink>
             </li>
           );
         })}
       </ol>
       {attention > 0 && (
-        <Link to="/orders?tab=attention" className="flex items-center justify-between border-t border-line bg-g-problem-bg/60 px-4 py-2 text-[13.5px] text-g-problem hover:bg-g-problem-bg">
+        <OrdersLink to="/orders?tab=attention" className="flex items-center justify-between border-t border-line bg-g-problem-bg/60 px-4 py-2 text-[13.5px] text-g-problem hover:bg-g-problem-bg">
           <span>{attention} {attention === 1 ? "order needs" : "orders need"} attention (hub issues, amendments, failed deliveries or holds)</span>
-          <span className="font-medium">View</span>
-        </Link>
+          {can("orders.view") && <span className="font-medium">View</span>}
+        </OrdersLink>
       )}
     </section>
   );
 }
 
 function ShopifyBanner() {
-  const { brand, isOwner } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
   const q = useShopifyConnection(brand.id);
   if (q.isLoading || q.isError || q.data?.status === "active") return null;
   const status = q.data?.status;
@@ -71,7 +78,7 @@ function ShopifyBanner() {
           : status === "error" ? "There's a problem with your Shopify connection. New orders may not be coming in."
           : "Connect your Shopify store so your orders flow in automatically."}
       </p>
-      {isOwner ? (
+      {can("shopify.manage") ? (
         <Link to="/settings" className="rounded bg-g-brand px-3 py-1.5 text-[13px] font-medium text-white dark:text-bg">Connect Shopify</Link>
       ) : <span className="text-[13px]">Ask your brand owner to connect it in Settings.</span>}
     </div>
@@ -116,20 +123,20 @@ function NeedsAction() {
 }
 
 export function Overview() {
-  const { brand } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
   return (
     <>
       <PageHeader title="Overview" description={`Orders for ${brand.name}, updated live.`} />
       <ShopifyBanner />
       <Pipeline />
       <div className="mt-6 flex flex-col gap-6">
-        <NeedsAction />
-        <div className="flex justify-end">
+        {can("orders.view") && <NeedsAction />}
+        {can("activity.view") && <div className="flex justify-end">
           <Link to="/activity" className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2.5 text-[13.5px] font-medium text-ink shadow-sm hover:bg-sunken">
             View full activity & latest updates
             <ArrowRight className="h-4 w-4 text-primary" />
           </Link>
-        </div>
+        </div>}
       </div>
     </>
   );

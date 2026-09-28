@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useBulkStatusChange } from "@/hooks/useData";
+import { useActiveBrand } from "@/context/BrandContext";
 import { commonBulkActions, type BulkActionKey } from "@/lib/status";
 import { plural } from "@/lib/format";
 import type { OrderOverview } from "@/lib/types";
@@ -18,10 +19,11 @@ export function BulkActions({ brandId, orders, onDispatch, onDone }: {
   onDispatch: () => void;
   onDone: () => void;
 }) {
+  const { can } = useActiveBrand();
   const bulk = useBulkStatusChange(brandId);
   const [open, setOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const actions = commonBulkActions(orders.map((o) => o.status));
+  const actions = commonBulkActions(orders.map((o) => o.status), can);
   const ids = orders.map((o) => o.id);
 
   const pick = (key: BulkActionKey) => {

@@ -1,4 +1,9 @@
 import type { InboundStatus, OrderStatus, ShipmentStatus } from "./types";
+import { brandTransitionPerm, type BrandPerm } from "./permissions";
+
+/** Permission check for the signed-in user (BrandContext `can`). Omitted = allow everything. */
+export type CanFn = (perm: BrandPerm) => boolean;
+const ALLOW_ALL: CanFn = () => true;
 
 /** Who needs to act next — drives badge colour everywhere. */
 export type StatusGroup = "brand" | "confirming" | "hub" | "transit" | "done" | "problem" | "closed";
@@ -210,7 +215,7 @@ const BRAND_ACTORS: OrderStatus[] = ["new", "brand_confirmed", "confirmation_pen
  * Options in the brand's "Update status" dropdown (transitions granted in migrations 014 and 032).
  * "Confirmed" from New goes through the brand confirm flow (brand_confirmed); otherwise it's `confirmed`.
  */
-export function brandStatusMoves(status: OrderStatus): { to: OrderStatus; label: string }[] {
+export function brandStatusMoves(status: OrderStatus, can: CanFn = ALLOW_ALL): { to: OrderStatus; label: string }[] {
   if (!BRAND_ACTORS.includes(status)) return [];
   const options: { to: OrderStatus; label: string }[] = [
     { to: "new", label: "New" },
@@ -218,27 +223,27 @@ export function brandStatusMoves(status: OrderStatus): { to: OrderStatus; label:
     { to: "cancelled", label: "Cancelled" },
     { to: "confirmation_pending", label: "Pending" },
   ];
-  return options.filter((m) => m.to !== status);
+  return options.filter((m) => m.to !== status && can(brandTransitionPerm(m.to)));
 }
 
 export type BulkActionKey = "new" | "brand_confirmed" | "confirmed" | "confirmation_pending" | "cancelled" | "ready" | "dispatch";
 export interface BulkAction { key: BulkActionKey; label: string }
 
 /** What the Orders page "Bulk action" menu offers for one order, based on its stage. */
-export function bulkActionsFor(status: OrderStatus): BulkAction[] {
+export function bulkActionsFor(status: OrderStatus, can: CanFn = ALLOW_ALL): BulkAction[] {
   const actions: BulkAction[] = [];
-  if (BRAND_READY_MARKABLE.includes(status)) actions.push({ key: "ready", label: "Mark ready to ship" });
-  if (BRAND_DISPATCHABLE.includes(status)) actions.push({ key: "dispatch", label: "Dispatch to hub" });
-  for (const m of brandStatusMoves(status)) {
+  if (BRAND_READY_MARKABLE.includes(status) && can("orders.prepare")) actions.push({ key: "ready", label: "Mark ready to ship" });
+  if (BRAND_DISPATCHABLE.includes(status) && can("dispatch.create")) actions.push({ key: "dispatch", label: "Dispatch to hub" });
+  for (const m of brandStatusMoves(status, can)) {
     actions.push({ key: m.to as BulkActionKey, label: m.to === "cancelled" ? "Cancel" : `Mark as ${m.label.toLowerCase()}` });
   }
   return actions;
 }
 
 /** Actions every one of the given orders allows, in a stable order. */
-export function commonBulkActions(statuses: OrderStatus[]): BulkAction[] {
+export function commonBulkActions(statuses: OrderStatus[], can: CanFn = ALLOW_ALL): BulkAction[] {
   if (statuses.length === 0) return [];
-  const [first, ...rest] = statuses.map(bulkActionsFor);
+  const [first, ...rest] = statuses.map((s) => bulkActionsFor(s, can));
   return first.filter((a) => rest.every((list) => list.some((b) => b.key === a.key)));
 }
 

@@ -62,7 +62,7 @@ function EditBatchDialog({ batch, onClose }: { batch: InboundBatchOverview | nul
 }
 
 export function Dispatches() {
-  const { brand } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
   const q = useInboundBatches(brand.id);
   const [open, setOpen] = useState<string | null>(null);
   const [editing, setEditing] = useState<InboundBatchOverview | null>(null);
@@ -95,7 +95,7 @@ export function Dispatches() {
                         </td>
                         <td><Pill group={st.group} label={st.label} /></td>
                         <td onClick={(e) => e.stopPropagation()}>
-                          {b.status === "in_transit" && (
+                          {b.status === "in_transit" && can("dispatch.create") && (
                             <button className="rounded p-1.5 text-muted hover:bg-sunken hover:text-ink" title="Edit dispatch" onClick={() => setEditing(b)}>
                               <Pencil className="h-3.5 w-3.5" /><span className="sr-only">Edit dispatch</span>
                             </button>

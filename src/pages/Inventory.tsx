@@ -75,8 +75,9 @@ function DeleteDialog({ brandId, item, onClose }: { brandId: string; item: Inven
   );
 }
 
-function StockTab({ brandId, onAdd, onEdit, onDelete }: {
+function StockTab({ brandId, canManage, onAdd, onEdit, onDelete }: {
   brandId: string;
+  canManage: boolean;
   onAdd: () => void;
   onEdit: (item: InventoryItem) => void;
   onDelete: (item: InventoryItem) => void;
@@ -101,7 +102,7 @@ function StockTab({ brandId, onAdd, onEdit, onDelete }: {
       ) : rows.length === 0 ? (
         <div className="panel">
           <EmptyState icon={<Archive className="h-6 w-6" />} title="No local stock yet"
-            action={<Button onClick={onAdd}><Plus className="h-4 w-4" /> Add SKU</Button>}>
+            action={canManage && <Button onClick={onAdd}><Plus className="h-4 w-4" /> Add SKU</Button>}>
             When you have items already in the country, add their SKUs here. In the dispatch dialog they'll show an
             orange dot and can be fulfilled from local inventory.
           </EmptyState>
@@ -123,12 +124,14 @@ function StockTab({ brandId, onAdd, onEdit, onDelete }: {
                     <td className="text-right tabular-nums">{i.quantity_available}</td>
                     <td className="whitespace-nowrap text-muted">{fmtDateTime(i.updated_at)}</td>
                     <td>
-                      <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="ghost" onClick={() => onEdit(i)}>Edit</Button>
-                        <button className="rounded p-1.5 text-muted hover:bg-sunken hover:text-danger" title={`Remove ${i.sku}`} onClick={() => onDelete(i)}>
-                          <Trash2 className="h-4 w-4" /><span className="sr-only">Remove {i.sku}</span>
-                        </button>
-                      </div>
+                      {canManage && (
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => onEdit(i)}>Edit</Button>
+                          <button className="rounded p-1.5 text-muted hover:bg-sunken hover:text-danger" title={`Remove ${i.sku}`} onClick={() => onDelete(i)}>
+                            <Trash2 className="h-4 w-4" /><span className="sr-only">Remove {i.sku}</span>
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -315,7 +318,8 @@ function OrdersTab({ brandId }: { brandId: string }) {
 }
 
 export function Inventory() {
-  const { brand } = useActiveBrand();
+  const { brand, can } = useActiveBrand();
+  const canManage = can("inventory.manage");
   const [tab, setTab] = useState<"stock" | "orders">("stock");
   const [editing, setEditing] = useState<EditTarget | null>(null);
   const [deleting, setDeleting] = useState<InventoryItem | null>(null);
@@ -334,7 +338,7 @@ export function Inventory() {
       <PageHeader
         title="Local stock"
         description="SKUs already in the country. Items here can be fulfilled from local inventory at dispatch. Returned items restocked in BD are added automatically."
-        actions={tab === "stock" && availableCount > 0 && (
+        actions={tab === "stock" && availableCount > 0 && canManage && (
           <Button onClick={() => setEditing({ quantity: 0 })}><Plus className="h-4 w-4" /> Add SKU</Button>
         )}
       />
@@ -347,6 +351,7 @@ export function Inventory() {
       {tab === "stock" && (
         <StockTab
           brandId={brand.id}
+          canManage={canManage}
           onAdd={() => setEditing({ quantity: 0 })}
           onEdit={(i) => setEditing({ sku: i.sku, quantity: i.quantity_available })}
           onDelete={(i) => setDeleting(i)}
@@ -355,8 +360,8 @@ export function Inventory() {
 
       {tab === "orders" && <OrdersTab brandId={brand.id} />}
 
-      <InventoryDialog brandId={brand.id} target={editing} onClose={() => setEditing(null)} />
-      <DeleteDialog brandId={brand.id} item={deleting} onClose={() => setDeleting(null)} />
+      {canManage && <InventoryDialog brandId={brand.id} target={editing} onClose={() => setEditing(null)} />}
+      {canManage && <DeleteDialog brandId={brand.id} item={deleting} onClose={() => setDeleting(null)} />}
     </>
   );
 }
