@@ -307,6 +307,22 @@ function AppearanceCard() {
   );
 }
 
+// Error texts shopify-callback puts in ?reason= (keep in step with it).
+const SHOPIFY_REASONS = new Set([
+  "Something went wrong while connecting to Shopify. Please try again.",
+  "Please start the connection from Settings in the portal, using Connect store.",
+  "The Shopify response was incomplete",
+  "This connection link has expired. Please try again.",
+  "Shopify is not configured on the server",
+  "Could not verify the request",
+  "Store address did not match",
+  "Shopify did not issue an access token. Please try again.",
+  "Shopify did not grant order access. Add the read_orders access scope to your app, release a new version, then connect again.",
+  "Connected, but new orders can't be sent to us yet. In your Shopify app, turn on protected customer data access (name, email, phone, address), release a new version, then connect again.",
+  "This Shopify store is already connected to another brand",
+  "The store couldn't be saved. Please try again.",
+]);
+
 export function Settings() {
   const [params, setParams] = useSearchParams();
   const qc = useQueryClient();
@@ -320,7 +336,9 @@ export function Settings() {
       toast.success("Shopify connected. New orders will appear automatically.");
       void qc.invalidateQueries({ queryKey: ["brand", brand.id] });
     } else {
-      toast.error(params.get("reason") || "Shopify connection didn't finish. Please try again.");
+      // Only show messages our connection flow sends: a crafted link can't put its own text here.
+      const reason = params.get("reason") ?? "";
+      toast.error(SHOPIFY_REASONS.has(reason) ? reason : "Shopify connection didn't finish. Please try again.");
     }
     setParams({}, { replace: true });
   }, [params, setParams, qc, brand.id]);

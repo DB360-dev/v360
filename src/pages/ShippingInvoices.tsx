@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Printer, Receipt } from "lucide-react";
 import { useActiveBrand } from "@/context/BrandContext";
 import { useShippingInvoiceLines, useShippingInvoices } from "@/hooks/useData";
+import { APP_NAME } from "@/lib/app";
 import { fmtDate, fmtMoney } from "@/lib/format";
+import { neutralize } from "@/lib/neutral";
 import type { InvoicePaymentStatus, ShippingInvoice } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -40,8 +42,8 @@ function InvoiceDialog({ invoice, onClose }: { invoice: ShippingInvoice | null; 
       <div id="shipping-invoice-print-area" className="rounded-lg border border-slate-300 bg-white p-6 font-sans text-slate-900 sm:p-8">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-4 border-b border-slate-300 pb-5">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">V360</h1>
-            <p className="mt-0.5 text-xs text-slate-600">Shipping charges: Lahore, PK to Dhaka, BD</p>
+            <h1 className="text-2xl font-bold tracking-tight">{APP_NAME}</h1>
+            <p className="mt-0.5 text-xs text-slate-600">Shipping charges: hub to delivery partner</p>
           </div>
           <div className="text-right text-xs">
             <p className="text-lg font-bold">SHIPPING INVOICE</p>
@@ -59,7 +61,7 @@ function InvoiceDialog({ invoice, onClose }: { invoice: ShippingInvoice | null; 
             <p className="font-bold uppercase tracking-wider text-slate-500">Shipment</p>
             <p className="mt-1 text-sm font-semibold">{invoice.shipment?.code}</p>
             <p className="text-slate-600">
-              {[invoice.shipment?.shipping_partner, invoice.shipment?.tracking_number].filter(Boolean).join(" · ")}
+              {[neutralize(invoice.shipment?.shipping_partner), invoice.shipment?.tracking_number].filter(Boolean).join(" · ")}
               {invoice.shipment?.dispatched_at ? ` · dispatched ${fmtDate(invoice.shipment.dispatched_at)}` : ""}
             </p>
           </div>
@@ -70,7 +72,7 @@ function InvoiceDialog({ invoice, onClose }: { invoice: ShippingInvoice | null; 
               <thead>
                 <tr className="bg-slate-50 font-bold text-slate-800">
                   <th className="border border-slate-300 px-2.5 py-1.5 text-left">Order #</th>
-                  <th className="border border-slate-300 px-2.5 py-1.5 text-left">Items shipped from Pakistan</th>
+                  <th className="border border-slate-300 px-2.5 py-1.5 text-left">Items shipped from the hub</th>
                   <th className="border border-slate-300 px-2.5 py-1.5 text-center">Units</th>
                   <th className="border border-slate-300 px-2.5 py-1.5 text-right">Weight (kg)</th>
                   <th className="border border-slate-300 px-2.5 py-1.5 text-right">Charge (PKR)</th>
@@ -102,7 +104,7 @@ function InvoiceDialog({ invoice, onClose }: { invoice: ShippingInvoice | null; 
           <div className="space-y-0.5 text-slate-600">
             <p>Rate: {num(invoice.freight_bdt_per_kg)} BDT/kg × FX {num(invoice.fx_rate, 4)} ({fmtDate(invoice.fx_rate_date)}) = {num(invoice.freight_bdt_per_kg * invoice.fx_rate)} PKR/kg</p>
             {invoice.bd_units > 0 && (
-              <p>{invoice.bd_units} unit{invoice.bd_units > 1 ? "s" : ""} fulfilled from your Bangladesh stock {invoice.bd_units > 1 ? "are" : "is"} not charged.</p>
+              <p>{invoice.bd_units} unit{invoice.bd_units > 1 ? "s" : ""} fulfilled from your local stock {invoice.bd_units > 1 ? "are" : "is"} not charged.</p>
             )}
           </div>
           <div className="rounded border border-slate-300 bg-slate-50 px-4 py-2 text-right">
@@ -124,13 +126,13 @@ export function ShippingInvoices() {
   return (
     <>
       <p className="mb-4 text-[13.5px] text-muted">
-        V360's charges for shipping your orders from Lahore to Dhaka, by weight. Units fulfilled from your Bangladesh stock are never charged.
+        Our charges for shipping your orders from the hub to the delivery partner, by weight. Units fulfilled from your local stock are never charged.
       </p>
       {q.isLoading ? <div className="panel"><SkeletonRows rows={4} cols={6} /></div>
         : q.isError ? <div className="panel"><ErrorState error={q.error} onRetry={() => q.refetch()} /></div>
         : q.data!.length === 0 ? (
           <div className="panel"><EmptyState icon={<Receipt className="h-6 w-6" />} title="No shipping invoices yet">
-            An invoice appears here when a shipment with your orders leaves the Lahore hub.
+            An invoice appears here when a shipment with your orders leaves the hub.
           </EmptyState></div>
         ) : (
           <>
@@ -145,7 +147,7 @@ export function ShippingInvoices() {
                       <td className="font-semibold">{inv.invoice_number}</td>
                       <td>{inv.shipment?.code ?? "—"}</td>
                       <td className="text-muted">{fmtDate(inv.created_at)}</td>
-                      <td className="text-right">{inv.pk_units}{inv.bd_units > 0 && <span className="text-faint"> (+{inv.bd_units} BD)</span>}</td>
+                      <td className="text-right">{inv.pk_units}{inv.bd_units > 0 && <span className="text-faint"> (+{inv.bd_units} local)</span>}</td>
                       <td className="text-right">{Number(inv.weight_kg)} kg</td>
                       <td className="whitespace-nowrap text-right font-semibold">{fmtMoney(inv.amount_pkr, "PKR")}</td>
                       <td className={`font-medium ${STATUS_CLASS[inv.payment_status]}`}>{STATUS_LABEL[inv.payment_status]}</td>

@@ -121,12 +121,12 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
           className="input h-8 w-[196px] px-2 py-0 pr-7 text-[13px]"
           aria-label={`Where ${i.product_name} is fulfilled from`}
         >
-          <option value={0}>Fulfilled by Pakistan</option>
+          <option value={0}>Shipped from the hub</option>
           {available && Array.from({ length: maxForThis }, (_, idx) => idx + 1).map((n) => (
             <option key={n} value={n}>
               {n === i.quantity
                 ? "Fulfilled by Inventory"
-                : `${n} from BD inventory, ${i.quantity - n} from PK`}
+                : `${n} from local inventory, ${i.quantity - n} from the hub`}
             </option>
           ))}
         </select>

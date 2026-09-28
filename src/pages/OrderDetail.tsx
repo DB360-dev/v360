@@ -258,9 +258,9 @@ export function OrderDetail() {
                         <td className="text-muted">{i.sku ?? "—"}</td>
                         {o.inbound_batch_id && (
                           <td className="whitespace-nowrap text-muted">
-                            {fromInventory === 0 ? "Pakistan" : fromPakistan === 0 ? inventoryTag : (
+                            {fromInventory === 0 ? "Hub" : fromPakistan === 0 ? inventoryTag : (
                               <div className="space-y-0.5">
-                                <div>{fromPakistan} × Pakistan</div>
+                                <div>{fromPakistan} × Hub</div>
                                 <div className="inline-flex items-center gap-1.5">{fromInventory} ×&nbsp;{inventoryTag}</div>
                               </div>
                             )}
@@ -365,7 +365,7 @@ export function OrderDetail() {
               {o.shipment ? (
                 <Facts rows={[
                   ["Shipment", o.shipment.code],
-                  ["Carrier", o.shipment.shipping_partner],
+                  ["Carrier", neutralize(o.shipment.shipping_partner)],
                   ["Tracking", o.shipment.tracking_number],
                   ["Status", SHIPMENT_STATUS_LABEL[o.shipment.status]],
                   ["Left hub", fmtDateTime(o.shipment.dispatched_at)],
@@ -376,7 +376,7 @@ export function OrderDetail() {
               {o.delivery_tracking_number || o.delivered_at || o.failure_reason || o.shipment?.received_at ? (
                 <Facts rows={[
                   ["With delivery partner", fmtDateTime(o.shipment?.received_at)],
-                  ["Courier", o.delivery_courier],
+                  ["Courier", neutralize(o.delivery_courier)],
                   ["Tracking", o.delivery_tracking_number],
                   ["Delivered", fmtDateTime(o.delivered_at)],
                   ...(o.failure_reason ? [["Failure reason", neutralize(o.failure_reason)] as [string, ReactNode]] : []),

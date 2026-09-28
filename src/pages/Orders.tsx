@@ -5,6 +5,7 @@ import { useActiveBrand } from "@/context/BrandContext";
 import { PAGE_SIZE, useOrders, useStatusCounts } from "@/hooks/useData";
 import { BRAND_DISPATCHABLE, ORDER_TABS, STATUS, brandStatus, bulkActionsFor, fulfilmentStatus, masterStatus } from "@/lib/status";
 import { fmtMoney, fmtShort, plural, since } from "@/lib/format";
+import { neutralize } from "@/lib/neutral";
 import type { OrderOverview, OrderStatus } from "@/lib/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Pill } from "@/components/ui/StatusBadge";
@@ -22,7 +23,7 @@ function useDebounced<T>(value: T, ms = 300) {
 }
 
 function trackingOf(o: OrderOverview): string | null {
-  if (o.delivery_tracking_number) return `${o.delivery_courier ?? "Courier"} ${o.delivery_tracking_number}`;
+  if (o.delivery_tracking_number) return `${o.delivery_courier ? neutralize(o.delivery_courier) : "Courier"} ${o.delivery_tracking_number}`;
   if (o.shipment_code) return o.shipment_code;
   if (o.inbound_tracking) return `${o.inbound_courier ?? ""} ${o.inbound_tracking}`.trim();
   return null;
