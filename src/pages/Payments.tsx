@@ -21,6 +21,9 @@ function PaymentDialog({ invoice, onClose }: { invoice: PayoutInvoice | null; on
   if (!invoice) return null;
   const l = invoice.lines;
   const pct = l?.v360_commission_pct ?? 0;
+  const bdt = l?.bdt ?? null;   // newer statements also carry BDT
+  const sub = (v: number | undefined, neg = false) =>
+    v === undefined ? null : <div className="font-normal text-slate-500">{neg && v ? "−" : ""}{num(v)} BDT</div>;
   return (
     <Dialog open onClose={onClose} width="lg" title={`Payment ${invoice.invoice_number}`}
       footer={<>
@@ -61,7 +64,7 @@ function PaymentDialog({ invoice, onClose }: { invoice: PayoutInvoice | null; on
                 <tr className="bg-slate-50 font-bold text-slate-800">
                   <th className="border border-slate-300 px-2.5 py-1.5 text-left">Order #</th>
                   <th className="border border-slate-300 px-2.5 py-1.5 text-left">Outcome</th>
-                  <th className="border border-slate-300 px-2.5 py-1.5 text-right">Order value</th>
+                  <th className="border border-slate-300 px-2.5 py-1.5 text-right">{bdt ? "Cash collected" : "Order value"}</th>
                   <th className="border border-slate-300 px-2.5 py-1.5 text-right">Commission</th>
                   <th className="border border-slate-300 px-2.5 py-1.5 text-right">Return deduction</th>
                   <th className="border border-slate-300 px-2.5 py-1.5 text-right">Payable</th>
@@ -70,12 +73,15 @@ function PaymentDialog({ invoice, onClose }: { invoice: PayoutInvoice | null; on
               <tbody>
                 {l.orders.map((o) => (
                   <tr key={o.order_id}>
-                    <td className="border border-slate-300 px-2.5 py-1.5 font-medium">{o.order_number}</td>
+                    <td className="border border-slate-300 px-2.5 py-1.5 font-medium">
+                      {o.order_number}
+                      {o.paid_online && <div className="text-[10px] font-normal text-slate-500">{o.value > 0 ? "Part paid online" : "Paid online: you already have this payment"}</div>}
+                    </td>
                     <td className="border border-slate-300 px-2.5 py-1.5">{masterStatus(o.status).label}</td>
-                    <td className="border border-slate-300 px-2.5 py-1.5 text-right">{num(o.value)}</td>
-                    <td className="border border-slate-300 px-2.5 py-1.5 text-right">{o.commission ? `−${num(o.commission)}` : "—"}</td>
-                    <td className="border border-slate-300 px-2.5 py-1.5 text-right">{o.returned_deduction ? `−${num(o.returned_deduction)}` : "—"}</td>
-                    <td className="border border-slate-300 px-2.5 py-1.5 text-right font-semibold">{num(o.payable)}</td>
+                    <td className="border border-slate-300 px-2.5 py-1.5 text-right">{num(o.value)}{sub(o.value_bdt)}</td>
+                    <td className="border border-slate-300 px-2.5 py-1.5 text-right">{o.commission ? <>−{num(o.commission)}{sub(o.commission_bdt, true)}</> : "—"}</td>
+                    <td className="border border-slate-300 px-2.5 py-1.5 text-right">{o.returned_deduction ? <>−{num(o.returned_deduction)}{sub(o.returned_deduction_bdt, true)}</> : "—"}</td>
+                    <td className="border border-slate-300 px-2.5 py-1.5 text-right font-semibold">{num(o.payable)}{sub(o.payable_bdt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -86,11 +92,17 @@ function PaymentDialog({ invoice, onClose }: { invoice: PayoutInvoice | null; on
         <div className="mt-5 flex justify-end">
           <table className="text-xs">
             <tbody>
-              <tr><td className="py-0.5 pr-6 text-slate-600">Delivered orders</td><td className="text-right">{num(l?.delivered_value ?? 0)}</td></tr>
-              <tr><td className="py-0.5 pr-6 text-slate-600">Commission ({pct}% of delivered)</td><td className="text-right">−{num(invoice.net_remaining)}</td></tr>
-              <tr><td className="py-0.5 pr-6 text-slate-600">Returned orders: 50% of {num(l?.returned_value ?? 0)}</td><td className="text-right">−{num(invoice.advance_amount)}</td></tr>
+              {bdt && <tr className="text-slate-500"><td /><td className="text-right font-semibold">PKR</td><td className="pl-4 text-right font-semibold">BDT</td></tr>}
+              <tr><td className="py-0.5 pr-6 text-slate-600">Delivered orders</td><td className="text-right">{num(l?.delivered_value ?? 0)}</td>
+                {bdt && <td className="pl-4 text-right text-slate-600">{num(bdt.delivered_value)}</td>}</tr>
+              <tr><td className="py-0.5 pr-6 text-slate-600">Commission ({pct}% of delivered{bdt ? " order value" : ""})</td><td className="text-right">−{num(invoice.net_remaining)}</td>
+                {bdt && <td className="pl-4 text-right text-slate-600">−{num(bdt.commission)}</td>}</tr>
+              <tr><td className="py-0.5 pr-6 text-slate-600">Returned orders</td><td className="text-right">−{num(invoice.advance_amount)}</td>
+                {bdt && <td className="pl-4 text-right text-slate-600">−{num(bdt.returned_value)}</td>}</tr>
               <tr className="border-t border-slate-300 font-bold">
-                <td className="pt-1.5 pr-6">Payable to you</td><td className="pt-1.5 text-right text-sm">{num(invoice.payable_amount)} PKR</td>
+                <td className="pt-1.5 pr-6">{invoice.payable_amount < 0 ? "You owe" : "Payable to you"}</td>
+                <td className="pt-1.5 text-right text-sm">{num(Math.abs(invoice.payable_amount))} PKR</td>
+                {bdt && <td className="pl-4 pt-1.5 text-right text-sm">{num(Math.abs(bdt.payable))} BDT</td>}
               </tr>
             </tbody>
           </table>
@@ -110,7 +122,7 @@ export function Payments() {
   return (
     <>
       <p className="mb-4 text-[13.5px] text-muted">
-        What we pay you for orders the delivery partner has settled: delivered order value, less commission, less 50% of the value of returned orders.
+        What we pay you for orders the delivery partner has settled: cash collected on delivered orders, less commission, less returned orders. Orders your customers paid online are already with you, so only their commission is charged.
       </p>
       {q.isLoading ? <div className="panel"><SkeletonRows rows={4} cols={6} /></div>
         : q.isError ? <div className="panel"><ErrorState error={q.error} onRetry={() => q.refetch()} /></div>

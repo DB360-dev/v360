@@ -148,6 +148,10 @@ export interface PayoutLine {
   order_id: string; order_number: string; status: OrderStatus; returned_due_to_discrepancy: boolean;
   value: number; commission: number; returned_deduction: number; payable: number;
   order_date?: string; customer_name?: string | null; city?: string | null;
+  /** From 2026-09-28 on: value = cash collected (0 when paid online), BDT twins. */
+  paid_online?: boolean;
+  value_bdt?: number; full_value?: number; full_value_bdt?: number;
+  commission_bdt?: number; returned_deduction_bdt?: number; payable_bdt?: number;
 }
 
 /** What we pay the brand for settled orders (invoices.invoice_type = 'brand_payout'). */
@@ -155,7 +159,11 @@ export interface PayoutInvoice {
   id: string; invoice_number: string; brand_id: string; order_count: number;
   total_value: number; advance_amount: number; net_remaining: number; payable_amount: number;
   payment_status: InvoicePaymentStatus; created_at: string; updated_at: string;
-  lines: { v360_commission_pct: number; delivered_value: number; returned_value: number; orders: PayoutLine[] } | null;
+  lines: {
+    v360_commission_pct: number; delivered_value: number; returned_value: number; orders: PayoutLine[];
+    /** From 2026-09-28 on: totals in BDT (amounts above are PKR). */
+    bdt?: { total_value: number; delivered_value: number; returned_value: number; commission: number; payable: number };
+  } | null;
 }
 
 export interface ShippingInvoice {

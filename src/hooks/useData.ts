@@ -521,6 +521,25 @@ export function useDisconnectShopify(brandId: string) {
 export interface ShopifySyncResult {
   fetched: number; created: number; updated: number; cancelled: number;
   skipped: number; unchanged: number; flagged: number; errors: number;
+  // Older deployments of shopify-sync don't send these.
+  skipped_reasons?: { no_shipping_country?: number; country_not_supported?: number };
+  incomplete?: boolean;
+}
+
+/** What happened to every fetched order, so nothing disappears silently. */
+function syncDetails(r: ShopifySyncResult): string {
+  const parts = [`${plural(r.fetched, "order")} fetched from Shopify`];
+  if (r.unchanged) parts.push(`${r.unchanged} already up to date`);
+  if (r.skipped) {
+    const why: string[] = [];
+    const reasons = r.skipped_reasons ?? {};
+    if (reasons.country_not_supported) why.push(`${reasons.country_not_supported} shipping to a country we don't deliver to`);
+    if (reasons.no_shipping_country) why.push(`${reasons.no_shipping_country} with no shipping address`);
+    parts.push(`${r.skipped} skipped${why.length ? ` (${why.join(", ")})` : ""}`);
+  }
+  if (r.errors) parts.push(`${plural(r.errors, "order")} couldn't be saved`);
+  return `${parts.join(" · ")}.`
+    + (r.incomplete ? " There are more orders than one sync can fetch: press Sync again, or pick a later date." : "");
 }
 
 export function useSyncShopify(brandId: string) {
@@ -537,7 +556,10 @@ export function useSyncShopify(brandId: string) {
       if (r.created) bits.push(`${plural(r.created, "new order")}`);
       if (r.updated) bits.push(`${plural(r.updated, "update")}`);
       if (r.cancelled) bits.push(`${plural(r.cancelled, "cancellation")}`);
-      toast.success(bits.length ? `Shopify sync finished: ${bits.join(", ")}.` : "Shopify is up to date. No new order changes.");
+      const title = bits.length ? `Shopify sync finished: ${bits.join(", ")}.` : "Shopify is up to date. No new order changes.";
+      const opts = { description: syncDetails(r), duration: 12000 };
+      if (r.errors || r.incomplete) toast.warning(title, opts);
+      else toast.success(title, opts);
     },
     onError: (e) => { toast.error(describeError(e)); },
     onSettled: () => qc.invalidateQueries({ queryKey: keys.all(brandId) }),
