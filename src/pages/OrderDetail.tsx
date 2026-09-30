@@ -258,9 +258,9 @@ export function OrderDetail() {
                         <td className="text-muted">{i.sku ?? "—"}</td>
                         {o.inbound_batch_id && (
                           <td className="whitespace-nowrap text-muted">
-                            {fromInventory === 0 ? "Hub" : fromPakistan === 0 ? inventoryTag : (
+                            {fromInventory === 0 ? "Pakistan" : fromPakistan === 0 ? inventoryTag : (
                               <div className="space-y-0.5">
-                                <div>{fromPakistan} × Hub</div>
+                                <div>{fromPakistan} × Pakistan</div>
                                 <div className="inline-flex items-center gap-1.5">{fromInventory} ×&nbsp;{inventoryTag}</div>
                               </div>
                             )}

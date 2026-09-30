@@ -60,7 +60,8 @@ const TABS_BEFORE_OTHERS: { key: string; label: string; statuses: OrderStatus[] 
   { key: "out", label: "Out for Delivery", statuses: ["out_for_delivery"] },
   { key: "delivered", label: "Delivered", statuses: ["delivered"] },
   { key: "returned", label: "Returned", statuses: ["returned"] },
-  { key: "attention", label: "Need Attention", statuses: ["hold", "cancelled"] },
+  { key: "attention", label: "Need Attention", statuses: ["hold"] },
+  { key: "cancelled", label: "Cancelled", statuses: ["cancelled"] },
 ];
 
 export const ORDER_TABS: { key: string; label: string; statuses: OrderStatus[] | null }[] = [

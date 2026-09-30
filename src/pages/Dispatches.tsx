@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { TextArea, TextField } from "@/components/ui/Field";
 import { EmptyState, ErrorState, SkeletonRows, Spinner } from "@/components/ui/States";
+import { CourierField, MANUAL_COURIER } from "@/components/CourierField";
 
 function BatchOrders({ batchId }: { batchId: string }) {
   const { brand } = useActiveBrand();
@@ -53,8 +54,8 @@ function EditBatchDialog({ batch, onClose }: { batch: InboundBatchOverview | nul
       description="You can correct these until the hub receives the parcel."
       footer={<><Button onClick={onClose} disabled={update.isPending}>Cancel</Button><Button type="submit" variant="primary" loading={update.isPending}>Save</Button></>}>
       <div className="space-y-4">
-        <TextField label="Courier" value={courier} onChange={(e) => setCourier(e.target.value)} error={err} />
-        <TextField label="Consignment / tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)} />
+        <CourierField value={courier} onChange={setCourier} error={err} />
+        <TextField label={courier.trim() === MANUAL_COURIER ? "Rider / booking details" : "Consignment / tracking number"} value={tracking} onChange={(e) => setTracking(e.target.value)} />
         <TextArea label="Notes for the hub" optional value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
       </div>
     </Dialog>

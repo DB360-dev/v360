@@ -4,11 +4,11 @@ import { Dialog } from "./ui/Dialog";
 import { Button } from "./ui/Button";
 import { TextArea, TextField } from "./ui/Field";
 import { Spinner } from "./ui/States";
+import { CourierField, MANUAL_COURIER, courierNeedsTracking } from "./CourierField";
 import { useDispatch, useDispatchItems, useInventory, useRestockedOrders } from "@/hooks/useData";
 import { plural, todayISO } from "@/lib/format";
 import type { OrderItem } from "@/lib/types";
 
-const COURIERS = ["TCS", "Leopards", "M&P", "Trax", "PostEx", "Hand delivery"];
 
 interface Props {
   brandId: string;
@@ -65,7 +65,7 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
   const submit = () => {
     const e: Record<string, string> = {};
     if (!courier.trim()) e.courier = "Enter the courier you used";
-    if (courier.trim() !== "Hand delivery" && !tracking.trim()) e.tracking = "Enter the consignment number so the parcel can be tracked";
+    if (courierNeedsTracking(courier) && !tracking.trim()) e.tracking = "Enter the consignment number so the parcel can be tracked";
     if (!date) e.date = "Enter the dispatch date";
     setErrors(e);
     if (Object.keys(e).length) return;
@@ -90,6 +90,7 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
   };
 
   const list = orders.map((o) => o.order_number).join(", ");
+  const manual = courier.trim() === MANUAL_COURIER;
 
   const itemRow = (i: OrderItem) => {
     const key = itemKey(i);
@@ -121,12 +122,12 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
           className="input h-8 w-[196px] px-2 py-0 pr-7 text-[13px]"
           aria-label={`Where ${i.product_name} is fulfilled from`}
         >
-          <option value={0}>Shipped from the hub</option>
+          <option value={0}>Fulfilled by Pakistan</option>
           {available && Array.from({ length: maxForThis }, (_, idx) => idx + 1).map((n) => (
             <option key={n} value={n}>
               {n === i.quantity
                 ? "Fulfilled by Inventory"
-                : `${n} from local inventory, ${i.quantity - n} from the hub`}
+                : `${n} from inventory, ${i.quantity - n} from Pakistan`}
             </option>
           ))}
         </select>
@@ -146,15 +147,20 @@ export function DispatchDialog({ brandId, orders, open, onClose, onDone }: Props
       </>}
     >
       <div className="space-y-4">
-        <div>
-          <TextField label="Courier" value={courier} onChange={(e) => setCourier(e.target.value)} list="courier-options" error={errors.courier} autoComplete="off" />
-          <datalist id="courier-options">{COURIERS.map((c) => <option key={c} value={c} />)}</datalist>
-        </div>
-        <TextField
-          label="Consignment / tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)}
-          error={errors.tracking} placeholder="e.g. 779912345678" optional={courier.trim() === "Hand delivery"}
-          hint="If these orders are in one parcel, use the same number for all of them."
-        />
+        <CourierField value={courier} onChange={setCourier} error={errors.courier} />
+        {manual ? (
+          <TextField
+            label="Rider / booking details" value={tracking} onChange={(e) => setTracking(e.target.value)} optional
+            placeholder="e.g. InDrive, Ali 0300 1234567"
+            hint="The app you used and the rider's name or phone number, so the hub knows who to expect."
+          />
+        ) : (
+          <TextField
+            label="Consignment / tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)}
+            error={errors.tracking} placeholder="e.g. 779912345678" optional={!courierNeedsTracking(courier)}
+            hint="If these orders are in one parcel, use the same number for all of them."
+          />
+        )}
         <TextField label="Dispatch date" value={date} readOnly />
         <TextArea label="Notes for the hub" optional value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="e.g. 2 bags, fragile items in the blue bag" />
 
