@@ -11,6 +11,13 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { EmptyState, ErrorState, Spinner } from "@/components/ui/States";
 import { DispatchDialog } from "@/components/DispatchDialog";
 
+/** Where parcels are sent; shown on the printed packing list. */
+const HUB_CONTACT = {
+  name: "Faris",
+  phone: "03134864044",
+  address: "Plot # 5, Business Enclave, Airport Road, Lahore, Pakistan",
+};
+
 type PrintMode = "order" | "product";
 
 interface ProductLine {
@@ -131,6 +138,14 @@ export function Dispatch() {
               </Button>
             )}
           </div>
+
+          {/* Printed on every packing list so the parcel reaches the right person at the hub. */}
+          <section className="mb-4 hidden break-inside-avoid border border-ink px-3 py-2 text-[13px] print:block">
+            <p className="font-semibold">Person of Contact at Local Hub</p>
+            <p>{HUB_CONTACT.name}</p>
+            <p>{HUB_CONTACT.phone}</p>
+            <p className="mt-1.5"><span className="font-semibold">Hub Address:</span> {HUB_CONTACT.address}</p>
+          </section>
 
           {printMode === "product" && (
             <section className="hidden print:block">

@@ -34,7 +34,7 @@ export function JourneyRail({ status, previousStatus }: { status: OrderStatus; p
                 : tone === "problem" ? "border-g-problem bg-g-problem-bg text-g-problem ring-4 ring-g-problem/15"
                 : "border-line bg-surface text-faint"}`}
             >
-              {tone === "done" ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
+              {tone === "done" || tone === "active" ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
             </span>
             <span className={`mt-2 hidden text-[12.5px] leading-tight sm:block ${here ? "font-semibold text-ink" : done ? "text-ink" : "text-faint"}`}>
               {leg.label}

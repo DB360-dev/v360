@@ -212,15 +212,20 @@ export const BRAND_DISPATCHABLE: OrderStatus[] = ["brand_preparing"];
 /** Statuses where the order is still with the brand, so the brand can move it. */
 const BRAND_ACTORS: OrderStatus[] = ["new", "brand_confirmed", "confirmation_pending", "customer_unreachable", "needs_amendment", "confirmed", "brand_preparing"];
 
+/** Statuses where the brand's "Confirmed" (re)confirms the order for the delivery partner to call the customer. */
+const BRAND_CONFIRMABLE: OrderStatus[] = ["new", "confirmation_pending", "customer_unreachable", "needs_amendment"];
+
 /**
- * Options in the brand's "Update status" dropdown (transitions granted in migrations 014 and 032).
- * "Confirmed" from New goes through the brand confirm flow (brand_confirmed); otherwise it's `confirmed`.
+ * Options in the brand's "Update status" dropdown.
+ * "Confirmed" always means brand confirmed: it (re)sends the order to the delivery partner, who alone
+ * can mark it fulfilment confirmed (migration 060). The one exception is undoing "Ready to ship".
  */
 export function brandStatusMoves(status: OrderStatus, can: CanFn = ALLOW_ALL): { to: OrderStatus; label: string }[] {
   if (!BRAND_ACTORS.includes(status)) return [];
   const options: { to: OrderStatus; label: string }[] = [
     { to: "new", label: "New" },
-    { to: status === "new" ? "brand_confirmed" : "confirmed", label: "Confirmed" },
+    ...(BRAND_CONFIRMABLE.includes(status) ? [{ to: "brand_confirmed" as OrderStatus, label: "Confirmed" }] : []),
+    ...(status === "brand_preparing" ? [{ to: "confirmed" as OrderStatus, label: "Not ready to ship" }] : []),
     { to: "cancelled", label: "Cancelled" },
     { to: "confirmation_pending", label: "Pending" },
   ];
